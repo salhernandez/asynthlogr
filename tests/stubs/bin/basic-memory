@@ -20,11 +20,20 @@ case "${1:-}" in
   project)
     case "${2:-}" in
       list)
-        # One project name per line — real basic-memory's exact output
-        # format is unverified (see docs/open-items.md #6); this stub
-        # intentionally uses the simplest plausible shape so tests can
-        # assert against a known contract.
-        cat "$PROJECTS_FILE"
+        # State is one "<name> <path>" line per project. With --json,
+        # mirror real basic-memory's shape: {"projects": [{"name", "path"}]}.
+        if [ "${3:-}" = "--json" ]; then
+          echo '{"projects": ['
+          sep=""
+          while read -r name path; do
+            [ -n "$name" ] || continue
+            printf '%s  {"name": "%s", "path": "%s"}' "$sep" "$name" "$path"
+            sep=$',\n'
+          done < "$PROJECTS_FILE"
+          printf '\n]}\n'
+        else
+          cat "$PROJECTS_FILE"
+        fi
         ;;
       add)
         name="$3"

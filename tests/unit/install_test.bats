@@ -61,6 +61,18 @@ copy_fixture_target() {
   [ -f "$TARGET/.claude/skills/i-have-adhd/SKILL.md" ]
   [ -f "$TARGET/.claude/skills/obsidian-notation-expert/SKILL.md" ]
   [ -f "$TARGET/.claude/skills/obsidian-node-link-expert/SKILL.md" ]
+  [ -f "$TARGET/.claude/asynthlogr/formats/decision-entry-format.md" ]
+  [ -f "$TARGET/.claude/asynthlogr/formats/subagent-run-format.md" ]
+}
+
+@test "keeps failed-writes.log out of basic-memory's index, without duplicating the ignore line on re-run" {
+  copy_fixture_target empty
+
+  "$INSTALL_SH" "$TARGET"
+  "$INSTALL_SH" "$TARGET"
+
+  ignore_file="$HOME/basic-memory/asynthlogr/.gitignore"
+  [ "$(grep -cxF 'failed-writes.log' "$ignore_file")" -eq 1 ]
 }
 
 @test "defaults basic_memory_dir to <HOME>/basic-memory/asynthlogr when --basic-memory-root is omitted" {
@@ -114,6 +126,8 @@ copy_fixture_target() {
   [ "$status" -eq 0 ]
   [[ "$output" == *"Registering basic-memory MCP server"* ]]
   grep -qi 'basic-memory' "$CLAUDE_STUB_STATE_DIR/claude-mcp-registered.txt"
+  # local scope is per-directory: must be registered from the target repo
+  [ "$(cat "$CLAUDE_STUB_STATE_DIR/claude-mcp-add-cwd.txt")" = "$(cd "$TARGET" && pwd -P)" ]
 }
 
 @test "does not re-register basic-memory with claude when already registered" {
@@ -143,6 +157,18 @@ copy_fixture_target() {
   run "$INSTALL_SH" "$TARGET"
   [ "$status" -eq 0 ]
   [[ "$output" == *"already registered"* ]]
+  [ "$(grep -c '^asynthlogr ' "$BM_STUB_STATE_DIR/projects.txt")" -eq 1 ]
+}
+
+@test "a project whose name merely contains 'asynthlogr' doesn't count as registered" {
+  copy_fixture_target empty
+  mkdir -p "$BM_STUB_STATE_DIR"
+  echo "asynthlogr-old /somewhere/else" > "$BM_STUB_STATE_DIR/projects.txt"
+
+  run "$INSTALL_SH" "$TARGET"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"registered 'asynthlogr'"* ]]
+  grep -q "^asynthlogr $HOME/basic-memory/asynthlogr$" "$BM_STUB_STATE_DIR/projects.txt"
 }
 
 @test "fails cleanly when basic-memory's project list is broken (simulated init failure)" {
@@ -258,23 +284,51 @@ enable_docker_stub() {
   chmod +x "$BIN_DIR/docker"
 }
 
-@test "falls back to the CLI when there's no usable Docker (absent, or present but not running)" {
+@test "falls back to the CLI when every docker call fails" {
   copy_fixture_target empty
-  # No docker stub installed — this is the default state of every test
-  # above too, but assert it explicitly here alongside the Docker-aware
-  # tests so the "no usable Docker" contract is pinned down in this
-  # section. Whatever real `docker` (if any) happens to be on the test
-  # host's PATH, either it's genuinely absent ("Docker not found on
-  # PATH") or its daemon isn't reachable from here ("daemon isn't
-  # running") — either way install.sh must fall back to the CLI, never
-  # error out and never try to start anything.
+  # Shadow whatever real `docker` the test host has with one that always
+  # fails, so a real running daemon (or basic-memory container) on the
+  # host can't change this test's outcome.
+  printf '#!/usr/bin/env bash\nexit 1\n' > "$BIN_DIR/docker"
+  chmod +x "$BIN_DIR/docker"
 
   run "$INSTALL_SH" "$TARGET"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"Docker not found on PATH"* ]] || [[ "$output" == *"daemon isn't running"* ]]
-  [[ "$output" == *"basic-memory found"* ]] || [[ "$output" == *"Installing via uv"* ]]
+  [[ "$output" == *"daemon isn't running"* ]]
+  [[ "$output" == *"basic-memory found"* ]]
   actual_mode="$(jq -r '.basic_memory_mode' "$TARGET/.claude/asynthlogr.config.json")"
   [ "$actual_mode" = "cli" ]
+}
+
+@test "detects Docker mode even without a 'timeout' command (stock macOS)" {
+  case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*) skip "builds a symlinked PATH; not practical under Git Bash" ;;
+  esac
+  copy_fixture_target empty
+  enable_docker_stub
+  DOCKER_DATA_DIR="$TEST_TMP/docker-knowledge"
+  mkdir -p "$DOCKER_DATA_DIR"
+  export DOCKER_STUB_DAEMON_RUNNING=1
+  export DOCKER_STUB_CONTAINER_ID=abc123
+  export DOCKER_STUB_HOST_PORT=32768
+  export DOCKER_STUB_HOST_DATA_DIR="$DOCKER_DATA_DIR"
+
+  # A PATH with every system tool except timeout/gtimeout.
+  SYS_BIN="$TEST_TMP/sysbin"
+  mkdir -p "$SYS_BIN"
+  for dir in /usr/local/bin /usr/bin /bin; do
+    [ -d "$dir" ] || continue
+    for tool in "$dir"/*; do
+      name="$(basename "$tool")"
+      case "$name" in timeout|gtimeout) continue ;; esac
+      [ -e "$SYS_BIN/$name" ] || ln -s "$tool" "$SYS_BIN/$name"
+    done
+  done
+
+  PATH="$BIN_DIR:$SYS_BIN" run "$INSTALL_SH" "$TARGET"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"found running basic-memory container (abc123)"* ]]
+  [ "$(jq -r '.basic_memory_mode' "$TARGET/.claude/asynthlogr.config.json")" = "docker" ]
 }
 
 @test "falls back to the CLI when Docker is installed but its daemon isn't running" {

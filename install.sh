@@ -66,6 +66,27 @@ bm() {
   fi
 }
 
+# Runs "$@" with a time limit of $1 seconds. `timeout` is GNU coreutils,
+# absent on stock macOS (Homebrew's coreutils installs it as `gtimeout`),
+# so fall back to a background job that gets killed when time's up.
+run_with_timeout() {
+  local secs="$1"; shift
+  if command -v timeout >/dev/null 2>&1; then
+    timeout "$secs" "$@"
+  elif command -v gtimeout >/dev/null 2>&1; then
+    gtimeout "$secs" "$@"
+  else
+    "$@" &
+    local pid=$!
+    ( sleep "$secs"; kill "$pid" 2>/dev/null ) &
+    local watcher=$!
+    local rc=0
+    wait "$pid" || rc=$?
+    kill "$watcher" 2>/dev/null || true
+    return "$rc"
+  fi
+}
+
 # ---- parse args ----
 [ $# -ge 1 ] || usage
 TARGET="$1"; shift
@@ -89,7 +110,7 @@ echo "== asynthlogr install -> $TARGET =="
 # the CLI path in step 2, same as before this feature existed.
 echo "[1/13] Checking for an existing basic-memory Docker deployment..."
 if command -v docker >/dev/null 2>&1; then
-  if timeout 5 docker info >/dev/null 2>&1; then
+  if run_with_timeout 5 docker info >/dev/null 2>&1; then
     echo "  Docker is installed and running."
     # Prefer matching by image (catches a renamed container using the
     # official image), fall back to the compose file's documented
@@ -176,19 +197,20 @@ fi
 
 # ---- step 3: ensure basic-memory is registered as an MCP server for Claude Code ----
 echo "[3/13] Checking basic-memory is registered as a Claude Code MCP server..."
-# TODO (docs/open-items.md #6): confirm `claude mcp list` / `claude mcp add`
-# are the right commands/flags for the Claude Code version in use.
+# `claude mcp add` defaults to local scope, which is keyed to the current
+# directory — so both commands run from inside the target repo, not from
+# wherever this installer was launched.
 if ! command -v claude >/dev/null 2>&1; then
   echo "ERROR: 'claude' CLI not found on PATH. Cannot register basic-memory as an MCP server."
   exit 1
 fi
-if ! claude mcp list 2>/dev/null | grep -qi 'basic-memory'; then
+if ! (cd "$TARGET" && claude mcp list 2>/dev/null) | grep -qi 'basic-memory'; then
   if [ "$BM_MODE" = "docker" ]; then
     echo "  Registering basic-memory MCP server (SSE, Docker) with Claude Code..."
-    claude mcp add --transport sse basic-memory "$BM_DOCKER_URL"
+    (cd "$TARGET" && claude mcp add --transport sse basic-memory "$BM_DOCKER_URL")
   else
     echo "  Registering basic-memory MCP server (stdio) with Claude Code..."
-    claude mcp add basic-memory -- uvx basic-memory mcp
+    (cd "$TARGET" && claude mcp add basic-memory -- uvx basic-memory mcp)
   fi
 else
   echo "  basic-memory already registered."
@@ -249,19 +271,25 @@ if [ "$BM_MODE" = "docker" ]; then
 else
   ASYNTHLOGR_PROJECT_PATH="$ASYNTHLOGR_DIR"
 fi
-# TODO (docs/open-items.md #6): confirm the exact output format of
-# `basic-memory project list` so this existence check is reliable —
-# the grep below is a best-effort placeholder.
-if bm project list 2>/dev/null | grep -qi 'asynthlogr'; then
+# `project list --json` prints {"projects": [{"name": ...}, ...]}; match
+# the name exactly so a project like "asynthlogr-old" doesn't count.
+if bm project list --json 2>/dev/null | grep -qE '"name"[[:space:]]*:[[:space:]]*"asynthlogr"'; then
   echo "  'asynthlogr' project already registered."
 else
   bm project add asynthlogr "$ASYNTHLOGR_PROJECT_PATH"
   echo "  registered 'asynthlogr' -> $ASYNTHLOGR_PROJECT_PATH"
 fi
+# failed-writes.log is a plain ops log, not a note. basic-memory honors a
+# project's own .gitignore, so this keeps the log out of its index.
+IGNORE_FILE="$ASYNTHLOGR_DIR/.gitignore"
+if ! grep -qxF 'failed-writes.log' "$IGNORE_FILE" 2>/dev/null; then
+  echo 'failed-writes.log' >> "$IGNORE_FILE"
+fi
 
 # ---- step 7: validate target, create dirs ----
 echo "[7/13] Preparing target directories..."
-mkdir -p "$TARGET/.claude/agents" "$TARGET/.claude/hooks" "$TARGET/.claude/skills"
+mkdir -p "$TARGET/.claude/agents" "$TARGET/.claude/hooks" "$TARGET/.claude/skills" \
+  "$TARGET/.claude/asynthlogr/formats"
 
 # ---- step 8: copy subagent definitions ----
 echo "[8/13] Installing subagent definitions..."
@@ -283,6 +311,10 @@ chmod +x "$TARGET/.claude/hooks/check-pending-subagents.sh"
 for skill in i-have-adhd obsidian-notation-expert obsidian-node-link-expert; do
   mkdir -p "$TARGET/.claude/skills/$skill"
   cp "$SCRIPT_DIR/skills/$skill/SKILL.md" "$TARGET/.claude/skills/$skill/SKILL.md"
+done
+# The entry/message templates decision-logger and the orchestrator follow.
+for fmt in decision-entry-format subagent-run-format; do
+  cp "$SCRIPT_DIR/docs/$fmt.md" "$TARGET/.claude/asynthlogr/formats/$fmt.md"
 done
 
 # ---- step 10: register the pending-run hook for Stop + SessionEnd ----
@@ -403,7 +435,7 @@ echo "  asynthlogr project:   $ASYNTHLOGR_DIR  (basic-memory project 'asynthlogr
 echo "  target repo:          $TARGET"
 echo "  files touched:        AGENTS.md, CLAUDE.md, .claude/settings.json,"
 echo "                        .claude/agents/*, .claude/hooks/*, .claude/skills/*,"
-echo "                        .claude/asynthlogr.config.json"
+echo "                        .claude/asynthlogr/formats/*, .claude/asynthlogr.config.json"
 echo ""
 echo "Note: .claude/active-thread.json is NOT created here — the orchestrator"
 echo "writes it itself at the start of each session (see AGENTS.md)."

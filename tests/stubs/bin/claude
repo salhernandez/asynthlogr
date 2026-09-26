@@ -16,6 +16,8 @@ case "${1:-}" in
         cat "$REGISTERED_FILE"
         ;;
       add)
+        # Local scope is keyed to the working directory, so record it.
+        pwd -P > "$STATE_DIR/claude-mcp-add-cwd.txt"
         # Two forms install.sh uses:
         #   claude mcp add <name> -- <command...>              (stdio/CLI mode)
         #   claude mcp add --transport sse <name> <url>        (Docker mode)
