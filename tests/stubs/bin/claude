@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# Deterministic stub for the `claude` CLI, used only in tests.
+# State is controlled by the CLAUDE_STUB_STATE_DIR env var, which must
+# be set by the test to a per-test temp directory.
+set -euo pipefail
+
+STATE_DIR="${CLAUDE_STUB_STATE_DIR:?CLAUDE_STUB_STATE_DIR must be set}"
+mkdir -p "$STATE_DIR"
+REGISTERED_FILE="$STATE_DIR/claude-mcp-registered.txt"
+touch "$REGISTERED_FILE"
+
+case "${1:-}" in
+  mcp)
+    case "${2:-}" in
+      list)
+        cat "$REGISTERED_FILE"
+        ;;
+      add)
+        # Two forms install.sh uses:
+        #   claude mcp add <name> -- <command...>              (stdio/CLI mode)
+        #   claude mcp add --transport sse <name> <url>        (Docker mode)
+        if [ "${3:-}" = "--transport" ]; then
+          name="$5"
+          url="$6"
+          echo "$name $url" >> "$REGISTERED_FILE"
+          echo "Added MCP server: $name ($url, transport=$4)"
+        else
+          name="$3"
+          echo "$name" >> "$REGISTERED_FILE"
+          echo "Added MCP server: $name"
+        fi
+        ;;
+      *)
+        echo "stub claude: unhandled mcp subcommand: ${2:-}" >&2
+        exit 1
+        ;;
+    esac
+    ;;
+  *)
+    echo "stub claude: unhandled command: ${1:-}" >&2
+    exit 1
+    ;;
+esac

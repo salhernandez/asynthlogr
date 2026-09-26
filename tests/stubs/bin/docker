@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# Deterministic stub for `docker`, used only in tests, to exercise
+# install.sh's basic-memory-via-Docker detection path without a real
+# Docker daemon. Controlled entirely by env vars the test sets:
+#
+#   DOCKER_STUB_DAEMON_RUNNING=1   `docker info` succeeds (daemon "up")
+#   DOCKER_STUB_CONTAINER_ID=<id>  `docker ps` reports this container running
+#   DOCKER_STUB_HOST_PORT=<port>   `docker port <id> 8000/tcp` reports this
+#   DOCKER_STUB_HOST_DATA_DIR=<p>  `docker inspect ... /app/data` reports this
+#
+# Leaving a var unset simulates that layer being absent (no daemon, no
+# container, no reachable port/mount) so install.sh falls back to CLI mode.
+set -euo pipefail
+
+case "${1:-}" in
+  info)
+    [ "${DOCKER_STUB_DAEMON_RUNNING:-0}" = "1" ]
+    ;;
+  ps)
+    if [ -n "${DOCKER_STUB_CONTAINER_ID:-}" ]; then
+      echo "$DOCKER_STUB_CONTAINER_ID"
+    fi
+    ;;
+  port)
+    if [ -n "${DOCKER_STUB_HOST_PORT:-}" ]; then
+      echo "0.0.0.0:${DOCKER_STUB_HOST_PORT}"
+    fi
+    ;;
+  inspect)
+    if [ -n "${DOCKER_STUB_HOST_DATA_DIR:-}" ]; then
+      echo "$DOCKER_STUB_HOST_DATA_DIR"
+    fi
+    ;;
+  exec)
+    # docker exec <container> basic-memory <args...>
+    # Forward straight to the canonical basic-memory stub sitting next
+    # to this one on PATH (same trick tests/stubs/bin/uv uses).
+    shift 2                      # drop "exec" and "<container>"
+    shift 1                      # drop the literal "basic-memory"
+    SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    exec "$SELF_DIR/basic-memory" "$@"
+    ;;
+  *)
+    echo "stub docker: unhandled command: ${1:-}" >&2
+    exit 1
+    ;;
+esac

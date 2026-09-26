@@ -1,0 +1,45 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  linux-docker:
+    name: Linux (debian:bookworm-slim, Docker)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and run the debian:bookworm-slim test image
+        run: tests/docker/run.sh
+
+  bats-native:
+    name: bats (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sanity-check required tools are present
+        shell: bash
+        run: |
+          jq --version
+          git --version
+          node --version
+          npm --version
+
+      - name: Install bats
+        shell: bash
+        run: npm install -g bats
+
+      - name: Run install.sh unit tests
+        shell: bash
+        run: bats tests/unit/install_test.bats
+
+      - name: Run Stop hook unit tests
+        shell: bash
+        run: bats tests/unit/stop_hook_test.bats

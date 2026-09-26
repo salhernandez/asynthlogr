@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# Deterministic stub for the `basic-memory` CLI, used only in tests.
+# State (registered projects) lives in a file controlled by
+# BM_STUB_STATE_DIR, which the test must set to a per-test temp dir.
+# Set BM_STUB_FAIL_LIST=1 to simulate basic-memory being broken (used
+# to test install.sh's "is it initialized" failure path).
+set -euo pipefail
+
+STATE_DIR="${BM_STUB_STATE_DIR:?BM_STUB_STATE_DIR must be set}"
+mkdir -p "$STATE_DIR"
+PROJECTS_FILE="$STATE_DIR/projects.txt"
+touch "$PROJECTS_FILE"
+
+if [ "${BM_STUB_FAIL_LIST:-0}" = "1" ]; then
+  echo "stub basic-memory: simulated failure" >&2
+  exit 1
+fi
+
+case "${1:-}" in
+  project)
+    case "${2:-}" in
+      list)
+        # One project name per line — real basic-memory's exact output
+        # format is unverified (see docs/open-items.md #6); this stub
+        # intentionally uses the simplest plausible shape so tests can
+        # assert against a known contract.
+        cat "$PROJECTS_FILE"
+        ;;
+      add)
+        name="$3"
+        path="$4"
+        echo "$name $path" >> "$PROJECTS_FILE"
+        echo "Added project: $name -> $path"
+        ;;
+      *)
+        echo "stub basic-memory: unhandled project subcommand: ${2:-}" >&2
+        exit 1
+        ;;
+    esac
+    ;;
+  *)
+    echo "stub basic-memory: unhandled command: ${1:-}" >&2
+    exit 1
+    ;;
+esac

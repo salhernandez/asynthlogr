@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Deterministic stub for `uv`, used only in tests.
+# Only implements what install.sh actually calls: `uv tool install basic-memory`.
+# "Installing" means copying the canonical basic-memory stub (from the
+# real tests/stubs/bin/ source tree, found via ASYNTHLOGR_TESTS_ROOT)
+# into this same directory, which the test's PATH already includes.
+set -euo pipefail
+
+if [ "${1:-}" = "tool" ] && [ "${2:-}" = "install" ] && [ "${3:-}" = "basic-memory" ]; then
+  : "${ASYNTHLOGR_TESTS_ROOT:?ASYNTHLOGR_TESTS_ROOT must be set}"
+  SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  cp "$ASYNTHLOGR_TESTS_ROOT/stubs/bin/basic-memory" "$SELF_DIR/basic-memory"
+  chmod +x "$SELF_DIR/basic-memory"
+  echo "Installed basic-memory (stub)"
+  exit 0
+fi
+
+echo "stub uv: unhandled invocation: $*" >&2
+exit 1

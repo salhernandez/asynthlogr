@@ -1,0 +1,20 @@
+# Layer 2 test image: exercises install.sh's actual bash/jq/coreutils
+# behavior on a clean, minimal Debian environment. External services
+# (claude, uv, basic-memory) stay stubbed (see tests/stubs/) — this
+# image is about "does the script itself work on real Debian," not
+# about testing basic-memory or Claude Code themselves.
+FROM debian:bookworm-slim
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+      bash \
+      bats \
+      jq \
+      git \
+      ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /repo
+COPY . /repo
+
+CMD ["bats", "tests/unit/install_test.bats", "tests/unit/stop_hook_test.bats"]

@@ -1,0 +1,5 @@
+{
+  "vault_root": "/absolute/path/to/basic-memory-dir",
+  "repo": "repo-1",
+  "thread": "auth-token-refresh"
+}
