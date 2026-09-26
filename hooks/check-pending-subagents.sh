@@ -54,7 +54,9 @@ PENDING_RUNS=()
 PENDING_STATUSES=()
 for tracking_file in "$SUBAGENTS_DIR"/*/agent-use-tracking.md; do
   [ -f "$tracking_file" ] || continue
-  status="$(sed -n 's/^status: *//p' "$tracking_file" | head -n1 | sed 's/#.*//' | tr -d '[:space:]')"
+  # basic-memory may quote YAML values, and a hand-written note may carry
+  # a trailing comment; strip both.
+  status="$(sed -n 's/^status: *//p' "$tracking_file" | head -n1 | sed 's/#.*//' | tr -d "[:space:]'\"")"
   if [ "$status" = "dispatched" ] || [ "$status" = "running" ]; then
     PENDING_RUNS+=("$(basename "$(dirname "$tracking_file")")")
     PENDING_STATUSES+=("$status")

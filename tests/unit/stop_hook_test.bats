@@ -85,6 +85,17 @@ run_hook() {
   [ "$(echo "$output" | jq 'has("decision") or has("continue")')" = "false" ]
 }
 
+@test "Stop: recognizes a quoted status, as basic-memory may write it" {
+  write_active_thread
+  run_dir="$VAULT/repo-1/thread-a/subagents/run-quoted"
+  mkdir -p "$run_dir"
+  printf -- "---\ntitle: agent-use-tracking\nstatus: 'running'\n---\n\n# Run log\n" > "$run_dir/agent-use-tracking.md"
+
+  run run_hook Stop
+  [ "$status" -eq 0 ]
+  [[ "$(echo "$output" | jq -r '.systemMessage')" == *"run-quoted (running)"* ]]
+}
+
 @test "Stop: warns again on every turn while runs stay pending (no marker state)" {
   write_active_thread
   copy_run run-running

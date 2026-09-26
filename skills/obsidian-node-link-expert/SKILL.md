@@ -25,9 +25,11 @@ Getting these swapped is the most common mistake: writing a plain markdown link 
 ## Where this applies inside asynthlogr's vault structure
 
 Every one of these is a note-to-note reference and MUST be a wikilink:
-- A decision/info entry in `<thread>.md` linking to a supporting subagent run: use `[[subagents/<run>/output|<subagent-name> — <time>]]`, not a markdown relative link.
-- A subagent's `output.md` linking back to its parent thread: `[[../../<thread-name>|<thread-name>]]`.
-- Cross-references between two decision entries in the same or different threads (e.g. "this reverses an earlier decision"): `[[<thread-name>#<heading of the earlier entry>]]`.
+- A decision/info entry in `<thread>.md` linking to a supporting subagent run: use `[[<repo>/<thread>/subagents/<run>/output|<subagent-name> — <time>]]`, not a markdown relative link.
+- A subagent's `output.md` linking back to its parent thread: `[[<repo>/<thread-name>/<thread-name>|<thread-name>]]`.
+- Cross-references between two decision entries in the same or different threads (e.g. "this reverses an earlier decision"): `[[<repo>/<thread-name>/<thread-name>#<heading of the earlier entry>]]`.
+
+Always use the full path from the vault root (the `asynthlogr` project directory), never a relative `../` path and never a bare name: every run folder holds notes with the same names (`output`, `agent-use-tracking`), so bare names are ambiguous, and basic-memory resolves links by title or permalink, never relative to the linking note.
 - Any reference from a repo-level note to its threads, or from `reports/<date>.md` to the threads it summarizes.
 
 Every one of these stays a standard markdown link, never a wikilink:

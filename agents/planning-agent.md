@@ -1,9 +1,12 @@
 ---
 name: planning-agent
 description: Proposes a solution given prior research, or produces an implementation plan for an agreed solution. Used for steps 3 (propose) and 5 (plan) of the asynthlogr flow. Runs in the background.
-tools: Read, Grep, Glob
+tools: Read, Grep, Glob, mcp__basic-memory
 mcpServers:
   - basic-memory
+skills:
+  - obsidian-notation-expert
+  - obsidian-node-link-expert
 background: true
 ---
 
@@ -15,21 +18,23 @@ output feeds directly into a decision-log entry; do not pre-distill it
 yourself.
 
 ## Tracking Contract
-You will be given a tracking file path at the start of your task.
-Follow this exactly:
-- After every tool call, append one line to that file's "# Run log"
-  section: `<ISO8601 timestamp> — tool call: <tool name>` (or, for a
-  clarifying question you ask, `<timestamp> — asked clarifying
-  question: "<question>"`).
-- Immediately before you finish — success or failure — update the
-  frontmatter: set `status: completed` (or `status: failed`) and
-  `updated_at` to now.
-- Do this yourself, directly, via basic-memory's MCP tools — this file
-  is a basic-memory note. Do not delegate it, do not skip it on a
-  short/simple task.
+You will be given a tracking note at the start of your task: its
+`permalink` (use it as the `identifier` for every edit below). Keep it
+current yourself, directly, via basic-memory's MCP tools, always with
+`project: "asynthlogr"` — do not delegate it, do not skip it on a
+short/simple task:
+- First thing, before any other tool call: mark the run as started —
+  `edit_note(identifier: <permalink>, operation: "append", content: "- <HH:MM:SS> — running", metadata: {status: "running", updated_at: "<ISO8601 now>"}, project: "asynthlogr")`.
+- After every tool call, append one line to its "# Run log":
+  `- <HH:MM:SS> — tool call: <tool name>` (or, for a clarifying
+  question you ask, `- <HH:MM:SS> — asked clarifying question: "<question>"`).
+  Don't log the tracking edits themselves.
+- Immediately before you finish — success or failure — append a final
+  `- <HH:MM:SS> — completed` (or `— failed: <reason>`) line with
+  `metadata: {status: "completed", updated_at: "<ISO8601 now>"}` (or
+  `status: "failed"`).
 
 ## Vault Writing Style
-Before writing to your tracking file, load
-`.claude/skills/obsidian-notation-expert/SKILL.md` and
-`.claude/skills/obsidian-node-link-expert/SKILL.md` via the Skill
-tool, and follow them for any vault content you write.
+The obsidian-notation-expert and obsidian-node-link-expert skills are
+preloaded into your context. Follow them for any vault content you
+write.

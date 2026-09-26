@@ -1,3 +1,8 @@
+---
+name: i-have-adhd
+description: Formatting rules for anything addressed to the human in an asynthlogr session — progress updates, clarifying questions, summaries. Load once at session start; persists until the human says "stop adhd mode" or "normal mode".
+---
+
 # i-have-adhd SKILL
 
 This is a formatting guide for communicating with readers who have ADHD. The skill reshapes output to reduce friction between understanding and action.
@@ -31,4 +36,4 @@ These rules apply throughout the session until the reader says "stop adhd mode" 
 **License:** MIT
 
 ---
-*Vendored verbatim from https://github.com/ayghri/i-have-adhd for use by asynthlogr's Human Communication Style protocol (see AGENTS.md).*
+*Vendored from https://github.com/ayghri/i-have-adhd for use by asynthlogr's Human Communication Style protocol (see AGENTS.md). The YAML frontmatter above was added so Claude Code registers it as a skill; the body is unchanged.*

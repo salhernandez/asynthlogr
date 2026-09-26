@@ -7,6 +7,11 @@ mixed types in one file. Both formats follow
 subagent runs" section uses a wikilink, while "Files" uses standard
 markdown links, since those point outside the vault.
 
+`decision-logger` appends each entry to the thread note with
+`edit_note(identifier: <thread_note>, operation: "append", ...,
+project: "asynthlogr")`. The orchestrator creates that note at session
+start, so the logger never has to create it.
+
 ## Decision entry
 
 ```markdown
@@ -42,7 +47,7 @@ markdown links, since those point outside the vault.
 - <item>
 
 ### Related subagent runs
-- [[subagents/2026-09-26T11-14-51_research-agent-rate-limit-handling/output|research-agent — 11:14:51]]
+- [[repo-1/auth-token-refresh/subagents/2026-09-26T11-14-51_research-agent-rate-limit-handling/output|research-agent — 11:14:51]]
 
 ### Files
 - [auth/token.ts:42](cursor://file/...) · [VS Code](vscode://file/...) · [GitHub](https://github.com/.../blob/<sha>/auth/token.ts#L42)

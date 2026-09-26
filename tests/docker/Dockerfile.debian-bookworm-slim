@@ -17,4 +17,4 @@ RUN apt-get update && \
 WORKDIR /repo
 COPY . /repo
 
-CMD ["bats", "tests/unit/install_test.bats", "tests/unit/stop_hook_test.bats"]
+CMD ["bats", "tests/unit/"]

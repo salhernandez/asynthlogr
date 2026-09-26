@@ -3,6 +3,13 @@
 Maintain a decision/activity log for this session via the `decision-logger`
 subagent. Follow this exactly.
 
+Every vault write below goes through basic-memory's MCP tools
+(`write_note` to create a note, `edit_note` to append to it or merge
+frontmatter via `metadata`), always with `project: "asynthlogr"` —
+omitting it writes to whatever project basic-memory touched last.
+`write_note` returns each note's `permalink`; keep it, since it's the
+`identifier` every later `edit_note` on that note needs.
+
 ### Your 5 steps (for step-tracking purposes)
 1. research — ask a subagent to research a specific area of the code
 2. clarify — ask specific questions about how it works
@@ -11,9 +18,9 @@ subagent. Follow this exactly.
 5. plan — ask for an implementation plan
 
 Step 3 and step 5 are the two points that trigger decision logging.
-Update agent-use-tracking.md's current_step the moment you move from
-one of these to the next — do not wait until you're several exchanges
-into the next step to record the transition.
+Record every step transition the moment it happens — not several
+exchanges into the next step:
+`edit_note(identifier: <thread tracking permalink>, operation: "append", content: "- <ISO8601> — step <N> (<name>) started", metadata: {current_step: <N>, current_step_name: "<name>", updated_at: "<ISO8601>"}, project: "asynthlogr")`
 
 ### At session start (once, before any subagent dispatch)
 Determine and fix for the rest of this session:
@@ -25,46 +32,52 @@ Determine and fix for the rest of this session:
   mid-session — one session, one thread name, decided once.
 - Read `.claude/asynthlogr.config.json` for `basic_memory_dir` (used
   as `vault_root` below).
-- Synchronously create, via basic-memory's MCP tools (not a plain file
-  write — this is vault content):
-  `<vault_root>/<repo>/<thread>/agent-use-tracking.md` with
-  `current_step: 1`.
-- Synchronously write `.claude/active-thread.json` with a plain file
-  write (this one file is repo-local operational config, not vault
-  content, so it does not go through basic-memory):
-  `{ "vault_root": "...", "repo": "...", "thread": "..." }`
-  (this is how the Stop hook finds the active thread).
+
+Then, synchronously, in this order:
+1. Create the thread note decision-logger will append entries to (it
+   only ever appends, so two background loggers can never race to
+   create it):
+   `write_note(title: "<thread>", directory: "<repo>/<thread>", content: "# <thread>\n", tags: "asynthlogr-thread", project: "asynthlogr")`
+   → keep its permalink as `thread_note`.
+2. Create the thread-level tracking note:
+   `write_note(title: "agent-use-tracking", directory: "<repo>/<thread>", content: "# Step log\n- <ISO8601> — step 1 (research) started\n", metadata: {repo: "<repo>", thread: "<thread>", current_step: 1, current_step_name: "research", updated_at: "<ISO8601>"}, project: "asynthlogr")`
+   → keep its permalink.
+3. Write `.claude/active-thread.json` with a plain file write (this
+   one file is repo-local operational config, not vault content, so
+   it does not go through basic-memory):
+   `{ "vault_root": "...", "repo": "...", "thread": "..." }`
+   (this is how the pending-run hooks find the active thread).
 
 ### On every subagent call (steps 1, 2, 3, 5 — research, questions,
 proposing a solution, planning)
 Before dispatching:
 1. Generate `run_id` (ISO8601 timestamp, `:`/`.` → `-`) and
    `topic_slug` (short kebab-case, from what this call is about).
-2. Synchronously create, via basic-memory's MCP tools:
-   `<vault_root>/<repo>/<thread>/subagents/<run_id>_<subagent_name>-<topic_slug>/agent-use-tracking.md`
-   with `status: dispatched`.
-3. Dispatch the subagent, giving it its task plus that tracking file's
-   path (every subagent definition carries the Tracking Contract below).
+   `run_folder` is `<run_id>_<subagent_name>-<topic_slug>`.
+2. Synchronously create the run's tracking note:
+   `write_note(title: "agent-use-tracking", directory: "<repo>/<thread>/subagents/<run_folder>", content: "# Run log\n- <HH:MM:SS> — dispatched\n", metadata: {run_id: "<run_id>", subagent_name: "<subagent_name>", topic_slug: "<topic_slug>", status: "dispatched", started_at: "<ISO8601>", updated_at: "<ISO8601>"}, project: "asynthlogr")`
+3. Append `- <ISO8601> — step <N> — subagent run: <run_folder>` to the
+   thread tracking note's step log.
+4. Dispatch the subagent, giving it its task plus that tracking note's
+   permalink (every subagent definition carries the Tracking Contract
+   below).
 
 When the subagent's result surfaces (even later, even in the
 background): dispatch `decision-logger` in the background — do not
-wait on it — with `entry_type: subagent-run`, `run_id`, `topic_slug`,
-`subagent_name`, `prompt_used`, `questions_asked`, `tools_used`,
-`final_output`. `decision-logger` writes `output.md` next to the
-tracking file — it never touches `agent-use-tracking.md`, that file
-belongs to the subagent alone.
+wait on it — with `entry_type: subagent-run`.
 
 ### At step 3 (solution proposed) and step 5 (plan finalized)
-Dispatch `decision-logger` in the background with `entry_type: decision`:
-`context`, `options_considered`, `decision`, `rationale`,
-`decision_maker`, `tools_used`, `qa`, `open_questions`, `files_touched`,
-`related_runs` (the `run_id`s of any subagent calls that fed this
-decision).
+Dispatch `decision-logger` in the background with `entry_type: decision`.
 
 ### On explicit request ("log this", "log this as info")
-Dispatch `decision-logger` in the background with `entry_type: info`:
-`content` (what the user asked to capture), `tools_used`,
-`related_runs` if relevant.
+Dispatch `decision-logger` in the background with `entry_type: info`.
+
+### Dispatching decision-logger
+Send it a `DECISION LOG ENTRY` block, exactly as specified in
+`.claude/asynthlogr/formats/subagent-run-format.md` — every dispatch
+carries `repo`, `thread`, `vault_root`, `thread_note`, `entry_type`,
+and `trigger`, plus the fields for that entry_type. Pass `related_runs`
+as `run_folder` names so the logger can link them.
 
 ### Hard rules
 - Never await `decision-logger`'s result. Never surface anything it
@@ -75,22 +88,18 @@ Dispatch `decision-logger` in the background with `entry_type: info`:
   orchestrator, synchronously, before dispatch — never by the
   subagent or by `decision-logger`.
 
-### Tracking Contract (applies to every subagent — research-agent,
-planning-agent, decision-logger, and any others added later)
-You will be given a tracking file path at the start of your task.
-Follow this exactly:
-- After every tool call, append one line to that file's "# Run log"
-  section: `<ISO8601 timestamp> — tool call: <tool name>` (or, for a
-  clarifying question you ask, `<timestamp> — asked clarifying
-  question: "<question>"`).
-- Immediately before you finish — success or failure — update the
-  frontmatter: set `status: completed` (or `status: failed`) and
-  `updated_at` to now.
-- Do this yourself, directly, via basic-memory's MCP tools — this file
-  is a basic-memory note, not a plain file, so you need
-  `mcpServers: - basic-memory` in your own definition to do this. Do
-  not use a generic file-write tool for it, do not delegate it, do not
-  skip it on a short/simple task.
+### Tracking Contract (applies to every subagent you dispatch with a
+tracking note — research-agent, planning-agent, and any added later;
+decision-logger is exempt, since it is never given one)
+- First thing: set `status: running` via `edit_note` `metadata`.
+- After every tool call, append one line to the note's "# Run log":
+  `- <HH:MM:SS> — tool call: <tool name>` (or, for a clarifying
+  question, `- <HH:MM:SS> — asked clarifying question: "<question>"`).
+- Immediately before finishing — success or failure — set
+  `status: completed` (or `status: failed`) and `updated_at`.
+- Done directly via basic-memory's MCP tools, which is why each such
+  subagent lists `mcp__basic-memory` in `tools` and `basic-memory` in
+  `mcpServers`. Never delegated, never skipped on a short task.
 
 ## Human Communication Style
 At the start of every session, load the i-have-adhd skill
@@ -114,16 +123,16 @@ subagent output, either level of agent-use-tracking.md) must be
 correct Obsidian markdown and properly wikilinked, since the user
 views this vault directly in Obsidian, including its Graph View.
 
-Before any write to the vault, load both:
-- `.claude/skills/obsidian-notation-expert/SKILL.md` — syntax rules
-  (callouts, tags, tables, math, escaping) so notes render correctly.
-- `.claude/skills/obsidian-node-link-expert/SKILL.md` — wikilink
-  rules so notes actually appear connected in Graph View. The key
-  rule: references to another vault note use `[[wikilink]]` syntax;
-  references to source code or external URLs (Cursor/VS Code/GitHub
-  links) use standard markdown `[text](url)` syntax. Never swap these.
+Before your first write to the vault, load both via the Skill tool:
+- `obsidian-notation-expert` — syntax rules (callouts, tags, tables,
+  math, escaping) so notes render correctly.
+- `obsidian-node-link-expert` — wikilink rules so notes actually
+  appear connected in Graph View. The key rule: references to another
+  vault note use `[[wikilink]]` syntax with the full path from the
+  vault root (e.g. `[[<repo>/<thread>/<thread>]]`); references to
+  source code or external URLs (Cursor/VS Code/GitHub links) use
+  standard markdown `[text](url)` syntax. Never swap these.
 
-This applies to every subagent that writes vault content —
-`decision-logger` and any subagent maintaining its own
-`agent-use-tracking.md` — not just to whichever agent talks to the
-human.
+Subagents that write vault content (`decision-logger`,
+`research-agent`, `planning-agent`) get both skills preloaded through
+their `skills:` frontmatter.

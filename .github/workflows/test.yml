@@ -36,10 +36,6 @@ jobs:
         shell: bash
         run: npm install -g bats
 
-      - name: Run install.sh unit tests
+      - name: Run unit tests
         shell: bash
-        run: bats tests/unit/install_test.bats
-
-      - name: Run Stop hook unit tests
-        shell: bash
-        run: bats tests/unit/stop_hook_test.bats
+        run: bats tests/unit/
