@@ -13,7 +13,7 @@ standard runners are unlimited on public repos regardless of OS.
 bats tests/unit/
 ```
 
-44 tests total (28 for `install.sh`, 13 for the pending-run hook's
+48 tests total (32 for `install.sh`, 13 for the pending-run hook's
 `Stop` and `SessionEnd` branches, 3 static checks on the agent/skill
 definitions in `definitions_test.bats`), run
 directly against fixtures under `tests/fixtures/` and stubbed external

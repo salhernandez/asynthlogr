@@ -12,20 +12,18 @@ something changes upstream.
    its own file/output format. A separate design pass, not part of the
    initial build.
 
-2. **Live end-to-end run against a real basic-memory + Claude Code
-   session.** Everything below was checked against docs, source, and
-   stubbed tests. Still unobserved in a real session:
-   - that `write_note(title: "agent-use-tracking", directory: ...)`
-     yields `<directory>/agent-use-tracking.md` with the `metadata`
-     fields as plain top-level frontmatter (the pending-run hooks read
-     `status:` straight from that file; they already tolerate quoted
-     values);
-   - that full-path wikilinks such as
-     `[[repo-1/thread-a/subagents/<run>/output|...]]` resolve in both
-     basic-memory and Obsidian (with the `asynthlogr` project
-     directory opened as the vault);
-   - that a haiku-model `decision-logger` follows the templates
-     reliably.
+2. **Live run inside a real Claude Code session.** Checked live against
+   the official basic-memory image (0.18.4): `write_note(title,
+   folder)` saves `<folder>/<title>.md` with `metadata`-style fields as
+   plain top-level frontmatter (`status: dispatched`, unquoted), so the
+   hooks read it as designed; full-path wikilinks resolve in *both*
+   directions (run → thread and thread → run, including run folders
+   with uppercase `T` and `_`, which basic-memory maps to the lowercased
+   permalink); `project add` works and a duplicate add exits 0 with
+   "already exists". Still unobserved: a real Claude Code session
+   driving the whole flow — whether a haiku-model `decision-logger`
+   follows the templates reliably, and how Obsidian renders the vault
+   (open the `asynthlogr` project directory as the vault).
 
 3. **basic-memory's Docker image serves MCP over SSE only**, and
    Claude Code now marks the SSE transport as deprecated. It still
@@ -84,6 +82,16 @@ something changes upstream.
   indexes non-hidden files unless a project `.gitignore` excludes
   them, so `install.sh` adds `failed-writes.log` to
   `<basic-memory-root>/asynthlogr/.gitignore`.
+
+- **Docker-mode detection against a live container** — run read-only
+  against a real `ghcr.io/basicmachines-co/basic-memory` container on
+  Docker Desktop for Windows. Found and fixed two bugs the stubs
+  couldn't show: Docker Desktop reports bind-mount sources as VM paths
+  (`/run/desktop/mnt/host/c/...`), now mapped back to `/c/...` (Git
+  Bash) or `/mnt/c/...` (WSL), with a CLI-mode fallback when the mount
+  isn't visible from the host; and basic-memory 0.18.x has no
+  `project list --json`, so the installer falls back to matching the
+  name cell of its table.
 
 - **Layer-2 Docker tests never executed** — now run: the
   `debian:bookworm-slim` image builds and the full bats suite passes

@@ -22,7 +22,23 @@ case "${1:-}" in
       list)
         # State is one "<name> <path>" line per project. With --json,
         # mirror real basic-memory's shape: {"projects": [{"name", "path"}]}.
-        if [ "${3:-}" = "--json" ]; then
+        # BM_STUB_OLD_VERSION=1 mimics basic-memory 0.18.x: no --json flag,
+        # and a rich table as the only output (captured from 0.18.4).
+        if [ "${BM_STUB_OLD_VERSION:-0}" = "1" ]; then
+          if [ "${3:-}" = "--json" ]; then
+            echo "No such option: --json" >&2
+            exit 2
+          fi
+          echo "        Basic Memory Projects         "
+          echo "┏━━━━━━━━━━━━┳━━━━━━━━━━━━━┳━━━━━━━━━┓"
+          echo "┃ Name       ┃ Path        ┃ Default ┃"
+          echo "┡━━━━━━━━━━━━╇━━━━━━━━━━━━━╇━━━━━━━━━┩"
+          while read -r name path; do
+            [ -n "$name" ] || continue
+            printf '│ %-10s │ %-11s │         │\n' "$name" "$path"
+          done < "$PROJECTS_FILE"
+          echo "└────────────┴─────────────┴─────────┘"
+        elif [ "${3:-}" = "--json" ]; then
           echo '{"projects": ['
           sep=""
           while read -r name path; do

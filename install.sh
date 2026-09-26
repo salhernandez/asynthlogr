@@ -65,6 +65,46 @@ bm() {
   fi
 }
 
+# Maps a bind-mount source reported by `docker inspect` to a path this
+# shell can use. Docker Desktop on Windows reports sources as paths inside
+# its VM (/run/desktop/mnt/host/c/Users/...), which exist nowhere on the
+# host: map them to Git Bash's /c/... or WSL's /mnt/c/... form. Anything
+# else (Linux, macOS) is already a real host path.
+host_path_from_docker() {
+  local src="$1" rest drive
+  case "$src" in
+    /run/desktop/mnt/host/*)
+      rest="${src#/run/desktop/mnt/host/}"
+      drive="${rest%%/*}"
+      if [ -d "/$drive" ]; then
+        echo "/$rest"
+      elif [ -d "/mnt/$drive" ]; then
+        echo "/mnt/$rest"
+      else
+        echo "$src"
+      fi
+      ;;
+    *) echo "$src" ;;
+  esac
+}
+
+# True if basic-memory already has a project named exactly "asynthlogr".
+# `project list --json` ({"projects": [{"name": ...}]}) only exists in
+# newer basic-memory; older releases (e.g. 0.18.x, still the cached
+# `latest` in many Docker setups) print only a table.
+bm_has_asynthlogr_project() {
+  local out
+  if out="$(bm project list --json 2>/dev/null)"; then
+    echo "$out" | grep -qE '"name"[[:space:]]*:[[:space:]]*"asynthlogr"'
+  else
+    # Table rows look like "│ asynthlogr │ /asynthlogr │ │"; match the
+    # whole first cell so "asynthlogr-old" doesn't count. "│" is multibyte,
+    # so use alternation, not a bracket expression (which breaks under
+    # the C locale).
+    bm project list 2>/dev/null | grep -qE '^(│|\|)[[:space:]]*asynthlogr[[:space:]]*(│|\|)'
+  fi
+}
+
 # Runs "$@" with a time limit of $1 seconds. `timeout` is GNU coreutils,
 # absent on stock macOS (Homebrew's coreutils installs it as `gtimeout`),
 # so fall back to a background job that gets killed when time's up.
@@ -131,7 +171,8 @@ if command -v docker >/dev/null 2>&1; then
         host_data_dir="$(docker inspect "$candidate" \
           --format '{{range .Mounts}}{{if eq .Destination "/app/data"}}{{.Source}}{{"\n"}}{{end}}{{end}}' \
           2>/dev/null | head -n1 || true)"
-        if [ -n "$host_data_dir" ]; then
+        host_data_dir="$(host_path_from_docker "$host_data_dir")"
+        if [ -n "$host_data_dir" ] && [ -d "$host_data_dir" ]; then
           BM_MODE="docker"
           BM_DOCKER_CONTAINER="$candidate"
           BM_DOCKER_URL="http://localhost:${host_port}/sse"
@@ -141,7 +182,8 @@ if command -v docker >/dev/null 2>&1; then
           echo "  host data directory:     $BM_DOCKER_HOST_DATA_DIR  (mounted at /app/data in the container)"
         else
           echo "  found a basic-memory container ($candidate) but it has no"
-          echo "  /app/data bind mount this installer recognizes — this"
+          echo "  /app/data bind mount this installer recognizes, or its host"
+          echo "  side isn't visible from here — this"
           echo "  installer only knows the official image's default layout"
           echo "  (see https://github.com/basicmachines-co/basic-memory/blob/main/docker-compose.yml)."
           echo "  Falling back to the local basic-memory CLI instead."
@@ -270,9 +312,7 @@ if [ "$BM_MODE" = "docker" ]; then
 else
   ASYNTHLOGR_PROJECT_PATH="$ASYNTHLOGR_DIR"
 fi
-# `project list --json` prints {"projects": [{"name": ...}, ...]}; match
-# the name exactly so a project like "asynthlogr-old" doesn't count.
-if bm project list --json 2>/dev/null | grep -qE '"name"[[:space:]]*:[[:space:]]*"asynthlogr"'; then
+if bm_has_asynthlogr_project; then
   echo "  'asynthlogr' project already registered."
 else
   bm project add asynthlogr "$ASYNTHLOGR_PROJECT_PATH"

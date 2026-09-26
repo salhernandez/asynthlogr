@@ -171,6 +171,28 @@ copy_fixture_target() {
   grep -q "^asynthlogr $HOME/basic-memory/asynthlogr$" "$BM_STUB_STATE_DIR/projects.txt"
 }
 
+@test "older basic-memory without 'project list --json': detects an existing project from its table" {
+  copy_fixture_target empty
+  export BM_STUB_OLD_VERSION=1
+  mkdir -p "$BM_STUB_STATE_DIR"
+  echo "asynthlogr /asynthlogr" > "$BM_STUB_STATE_DIR/projects.txt"
+
+  run "$INSTALL_SH" "$TARGET"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"'asynthlogr' project already registered"* ]]
+}
+
+@test "older basic-memory without 'project list --json': a similarly named project doesn't count" {
+  copy_fixture_target empty
+  export BM_STUB_OLD_VERSION=1
+  mkdir -p "$BM_STUB_STATE_DIR"
+  echo "asynthlogr-old /asynthlogr-old" > "$BM_STUB_STATE_DIR/projects.txt"
+
+  run "$INSTALL_SH" "$TARGET"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"registered 'asynthlogr'"* ]]
+}
+
 @test "fails cleanly when basic-memory's project list is broken (simulated init failure)" {
   copy_fixture_target empty
   export BM_STUB_FAIL_LIST=1
@@ -406,6 +428,42 @@ enable_docker_stub() {
   # the asynthlogr project was registered via `docker exec ... basic-memory project add`,
   # using the CONTAINER-side path, not the host path
   grep -q "asynthlogr /app/data/asynthlogr" "$BM_STUB_STATE_DIR/projects.txt"
+}
+
+@test "maps a Docker Desktop VM mount path (/run/desktop/mnt/host/...) back to the host path" {
+  copy_fixture_target empty
+  enable_docker_stub
+  DOCKER_DATA_DIR="$TEST_TMP/docker-knowledge"
+  mkdir -p "$DOCKER_DATA_DIR"
+  export DOCKER_STUB_DAEMON_RUNNING=1
+  export DOCKER_STUB_CONTAINER_ID=abc123
+  export DOCKER_STUB_HOST_PORT=8011
+  # What Docker Desktop on Windows reports for a C:\Users\... bind mount
+  # is /run/desktop/mnt/host/c/Users/...; here the "drive" is the first
+  # component of the test's real temp path, so the mapping lands on it.
+  export DOCKER_STUB_HOST_DATA_DIR="/run/desktop/mnt/host${DOCKER_DATA_DIR}"
+
+  run "$INSTALL_SH" "$TARGET"
+  [ "$status" -eq 0 ]
+  [ "$(jq -r '.basic_memory_mode' "$TARGET/.claude/asynthlogr.config.json")" = "docker" ]
+  [ "$(jq -r '.basic_memory_dir' "$TARGET/.claude/asynthlogr.config.json")" = "$DOCKER_DATA_DIR/asynthlogr" ]
+  [ -d "$DOCKER_DATA_DIR/asynthlogr" ]
+  [ ! -e "/run/desktop/mnt/host${DOCKER_DATA_DIR}" ]   # never mkdir'd the VM path
+}
+
+@test "falls back to the CLI when the container's mount isn't visible from this host" {
+  copy_fixture_target empty
+  enable_docker_stub
+  export DOCKER_STUB_DAEMON_RUNNING=1
+  export DOCKER_STUB_CONTAINER_ID=abc123
+  export DOCKER_STUB_HOST_PORT=8011
+  export DOCKER_STUB_HOST_DATA_DIR="$TEST_TMP/does-not-exist"
+
+  run "$INSTALL_SH" "$TARGET"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Falling back to the local basic-memory CLI"* ]]
+  [ "$(jq -r '.basic_memory_mode' "$TARGET/.claude/asynthlogr.config.json")" = "cli" ]
+  [ ! -e "$TEST_TMP/does-not-exist" ]
 }
 
 @test "ignores a mismatched --basic-memory-root in Docker mode and uses the container's real mount" {
