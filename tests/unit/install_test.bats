@@ -380,7 +380,7 @@ enable_docker_stub() {
   [ "$actual_mode" = "cli" ]
 }
 
-@test "never calls docker run/start/compose — detection is read-only" {
+@test "never calls docker run/start/compose: detection is read-only" {
   copy_fixture_target empty
   enable_docker_stub
   export DOCKER_STUB_DAEMON_RUNNING=1

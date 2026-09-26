@@ -47,3 +47,11 @@ frontmatter() {
     grep -q "$(basename "$ref" .md)" "$REPO_ROOT/install.sh" || { echo "install.sh doesn't copy $ref" >&2; return 1; }
   done
 }
+
+@test "every bats test name is plain ASCII" {
+  # bats on Windows (Git Bash) can't look up a test whose name has
+  # non-ASCII characters, e.g. an em dash, and aborts the whole run.
+  if LC_ALL=C grep -n '^@test ".*[^ -~]' "$REPO_ROOT"/tests/unit/*.bats; then
+    return 1
+  fi
+}

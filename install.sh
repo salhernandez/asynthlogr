@@ -100,8 +100,9 @@ bm_has_asynthlogr_project() {
     # Table rows look like "│ asynthlogr │ /asynthlogr │ │"; match the
     # whole first cell so "asynthlogr-old" doesn't count. "│" is multibyte,
     # so use alternation, not a bracket expression (which breaks under
-    # the C locale).
-    bm project list 2>/dev/null | grep -qE '^(│|\|)[[:space:]]*asynthlogr[[:space:]]*(│|\|)'
+    # the C locale); a literal "|" is [|], since BSD grep reads a
+    # backslash-pipe in -E patterns as alternation.
+    bm project list 2>/dev/null | grep -qE '^(│|[|])[[:space:]]*asynthlogr[[:space:]]*(│|[|])'
   fi
 }
 

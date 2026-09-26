@@ -9,7 +9,7 @@ jobs:
     name: Linux (debian:bookworm-slim, Docker)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Build and run the debian:bookworm-slim test image
         run: tests/docker/run.sh
@@ -22,7 +22,7 @@ jobs:
       matrix:
         os: [windows-latest, macos-latest]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Sanity-check required tools are present
         shell: bash
