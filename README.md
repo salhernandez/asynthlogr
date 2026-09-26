@@ -37,7 +37,8 @@ decisions, captured without slowing anything down.
   - **Docker mode:** if the official
     [`ghcr.io/basicmachines-co/basic-memory`](https://github.com/basicmachines-co/basic-memory/blob/main/docker-compose.yml)
     image is already up, `install.sh` hooks onto it — registering its
-    SSE MCP endpoint with Claude Code and running `basic-memory
+    MCP endpoint (`http://localhost:<port>/mcp`, SSE or HTTP, as the
+    container runs it) with Claude Code and running `basic-memory
     project ...` commands via `docker exec`. It never starts Docker
     and never starts a container itself.
   - **CLI mode:** otherwise, it installs the `basic-memory` CLI (via

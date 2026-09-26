@@ -7,6 +7,7 @@
 #   DOCKER_STUB_CONTAINER_ID=<id>  `docker ps` reports this container running
 #   DOCKER_STUB_HOST_PORT=<port>   `docker port <id> 8000/tcp` reports this
 #   DOCKER_STUB_HOST_DATA_DIR=<p>  `docker inspect ... /app/data` reports this
+#   DOCKER_STUB_CMD="<args>"       `docker inspect ... .Config.Cmd` reports these
 #
 # Leaving a var unset simulates that layer being absent (no daemon, no
 # container, no reachable port/mount) so install.sh falls back to CLI mode.
@@ -27,6 +28,15 @@ case "${1:-}" in
     fi
     ;;
   inspect)
+    # The container's command, one argument per line (install.sh asks for
+    # {{range .Config.Cmd}}{{println .}}{{end}}). Defaults to the official
+    # image's CMD; DOCKER_STUB_CMD overrides it (space-separated).
+    if [[ "$*" == *".Config.Cmd"* ]]; then
+      for arg in ${DOCKER_STUB_CMD:-basic-memory mcp --transport sse --host 0.0.0.0 --port 8000}; do
+        echo "$arg"
+      done
+      exit 0
+    fi
     if [ -n "${DOCKER_STUB_HOST_DATA_DIR:-}" ]; then
       echo "$DOCKER_STUB_HOST_DATA_DIR"
     fi

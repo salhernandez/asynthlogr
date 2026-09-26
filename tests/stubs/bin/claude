@@ -24,7 +24,7 @@ case "${1:-}" in
         if [ "${3:-}" = "--transport" ]; then
           name="$5"
           url="$6"
-          echo "$name $url" >> "$REGISTERED_FILE"
+          echo "$name $url $4" >> "$REGISTERED_FILE"
           echo "Added MCP server: $name ($url, transport=$4)"
         else
           name="$3"

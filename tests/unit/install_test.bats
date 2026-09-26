@@ -422,10 +422,11 @@ enable_docker_stub() {
   actual_mode="$(jq -r '.basic_memory_mode' "$TARGET/.claude/asynthlogr.config.json")"
   [ "$actual_mode" = "docker" ]
   actual_endpoint="$(jq -r '.basic_memory_mcp_endpoint' "$TARGET/.claude/asynthlogr.config.json")"
-  [ "$actual_endpoint" = "http://localhost:32768/sse" ]
+  [ "$actual_endpoint" = "http://localhost:32768/mcp" ]
 
-  # registered with claude using the SSE transport, not stdio
-  grep -q "basic-memory http://localhost:32768/sse" "$CLAUDE_STUB_STATE_DIR/claude-mcp-registered.txt"
+  # registered with claude using the SSE transport at basic-memory's
+  # default --path (/mcp), not stdio
+  grep -qx "basic-memory http://localhost:32768/mcp sse" "$CLAUDE_STUB_STATE_DIR/claude-mcp-registered.txt"
 
   # the asynthlogr project was registered via `docker exec ... basic-memory project add`,
   # using the CONTAINER-side path, not the host path
@@ -466,6 +467,23 @@ enable_docker_stub() {
   [[ "$output" == *"Falling back to the local basic-memory CLI"* ]]
   [ "$(jq -r '.basic_memory_mode' "$TARGET/.claude/asynthlogr.config.json")" = "cli" ]
   [ ! -e "$TEST_TMP/does-not-exist" ]
+}
+
+@test "registers the transport and path the container actually runs with" {
+  copy_fixture_target empty
+  enable_docker_stub
+  DOCKER_DATA_DIR="$TEST_TMP/docker-knowledge"
+  mkdir -p "$DOCKER_DATA_DIR"
+  export DOCKER_STUB_DAEMON_RUNNING=1
+  export DOCKER_STUB_CONTAINER_ID=abc123
+  export DOCKER_STUB_HOST_PORT=8011
+  export DOCKER_STUB_HOST_DATA_DIR="$DOCKER_DATA_DIR"
+  export DOCKER_STUB_CMD="basic-memory mcp --transport streamable-http --host 0.0.0.0 --port 8000 --path /bm"
+
+  run "$INSTALL_SH" "$TARGET"
+  [ "$status" -eq 0 ]
+  grep -qx "basic-memory http://localhost:8011/bm http" "$CLAUDE_STUB_STATE_DIR/claude-mcp-registered.txt"
+  [ "$(jq -r '.basic_memory_mcp_transport' "$TARGET/.claude/asynthlogr.config.json")" = "http" ]
 }
 
 @test "ignores a mismatched --basic-memory-root in Docker mode and uses the container's real mount" {

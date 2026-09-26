@@ -16,7 +16,8 @@
 #                  talking to Claude Code over stdio.
 #   - Docker mode: an already-running container of the official
 #                  ghcr.io/basicmachines-co/basic-memory image, talking
-#                  to Claude Code over SSE (see
+#                  to Claude Code over SSE or streamable HTTP at
+#                  http://localhost:<port>/mcp (see
 #                  https://github.com/basicmachines-co/basic-memory/blob/main/docker-compose.yml).
 #
 # IMPORTANT: this installer NEVER starts Docker itself and NEVER starts
@@ -39,12 +40,14 @@ FORCE=false
 # basic-memory reachability, filled in by steps 1-2:
 #   BM_MODE                 "docker" or "cli"
 #   BM_DOCKER_CONTAINER      container id, docker mode only
-#   BM_DOCKER_URL            SSE endpoint URL, docker mode only
+#   BM_DOCKER_URL            MCP endpoint URL, docker mode only
+#   BM_DOCKER_TRANSPORT      "sse" or "http" (claude mcp add --transport)
 #   BM_DOCKER_HOST_DATA_DIR  host path bind-mounted into the container
 #                            at /app/data, docker mode only
 BM_MODE=""
 BM_DOCKER_CONTAINER=""
 BM_DOCKER_URL=""
+BM_DOCKER_TRANSPORT=""
 BM_DOCKER_HOST_DATA_DIR=""
 BM_DOCKER_CONTAINER_DATA_DIR="/app/data"
 
@@ -160,9 +163,18 @@ if command -v docker >/dev/null 2>&1; then
       candidate="$(docker ps --filter 'name=basic-memory-server' --format '{{.ID}}' 2>/dev/null | head -n1 || true)"
     fi
     if [ -n "$candidate" ]; then
-      # The image's Dockerfile/docker-compose.yml both run
-      # `basic-memory mcp --transport sse --host 0.0.0.0 --port 8000` —
-      # SSE only, no HTTP-streamable — so we register with --transport sse.
+      # The container's own command says how it serves MCP. The official
+      # image runs `basic-memory mcp --transport sse --host 0.0.0.0 --port
+      # 8000`, and basic-memory mounts both its SSE and streamable-HTTP
+      # transports at --path, which defaults to /mcp (not /sse).
+      bm_cmd="$(docker inspect "$candidate" --format '{{range .Config.Cmd}}{{println .}}{{end}}' 2>/dev/null | tr -d '\r' || true)"
+      bm_transport="$(echo "$bm_cmd" | awk 'prev == "--transport" { print; exit } { prev = $0 }')"
+      bm_path="$(echo "$bm_cmd" | awk 'prev == "--path" { print; exit } { prev = $0 }')"
+      [ -n "$bm_path" ] || bm_path="/mcp"
+      case "$bm_transport" in
+        streamable-http) bm_claude_transport="http" ;;
+        *) bm_claude_transport="sse" ;;
+      esac
       port_line="$(docker port "$candidate" 8000/tcp 2>/dev/null | head -n1 || true)"
       host_port="${port_line##*:}"
       if [ -n "$host_port" ] && [ "$host_port" != "$port_line" ]; then
@@ -176,10 +188,11 @@ if command -v docker >/dev/null 2>&1; then
         if [ -n "$host_data_dir" ] && [ -d "$host_data_dir" ]; then
           BM_MODE="docker"
           BM_DOCKER_CONTAINER="$candidate"
-          BM_DOCKER_URL="http://localhost:${host_port}/sse"
+          BM_DOCKER_URL="http://localhost:${host_port}${bm_path}"
+          BM_DOCKER_TRANSPORT="$bm_claude_transport"
           BM_DOCKER_HOST_DATA_DIR="$host_data_dir"
           echo "  found running basic-memory container ($candidate)"
-          echo "  MCP endpoint:            $BM_DOCKER_URL"
+          echo "  MCP endpoint:            $BM_DOCKER_URL ($BM_DOCKER_TRANSPORT)"
           echo "  host data directory:     $BM_DOCKER_HOST_DATA_DIR  (mounted at /app/data in the container)"
         else
           echo "  found a basic-memory container ($candidate) but it has no"
@@ -248,8 +261,8 @@ if ! command -v claude >/dev/null 2>&1; then
 fi
 if ! (cd "$TARGET" && claude mcp list 2>/dev/null) | grep -qi 'basic-memory'; then
   if [ "$BM_MODE" = "docker" ]; then
-    echo "  Registering basic-memory MCP server (SSE, Docker) with Claude Code..."
-    (cd "$TARGET" && claude mcp add --transport sse basic-memory "$BM_DOCKER_URL")
+    echo "  Registering basic-memory MCP server ($BM_DOCKER_TRANSPORT, Docker) with Claude Code..."
+    (cd "$TARGET" && claude mcp add --transport "$BM_DOCKER_TRANSPORT" basic-memory "$BM_DOCKER_URL")
   else
     echo "  Registering basic-memory MCP server (stdio) with Claude Code..."
     (cd "$TARGET" && claude mcp add basic-memory -- uvx basic-memory mcp)
@@ -421,7 +434,8 @@ if [ "$BM_MODE" = "docker" ]; then
   "basic_memory_project": "asynthlogr",
   "basic_memory_mode": "docker",
   "basic_memory_docker_container": "$BM_DOCKER_CONTAINER",
-  "basic_memory_mcp_endpoint": "$BM_DOCKER_URL"
+  "basic_memory_mcp_endpoint": "$BM_DOCKER_URL",
+  "basic_memory_mcp_transport": "$BM_DOCKER_TRANSPORT"
 }
 EOF
 else

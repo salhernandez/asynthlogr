@@ -24,11 +24,12 @@ something changes upstream.
    follows the templates reliably, and how Obsidian renders the vault
    (open the `asynthlogr` project directory as the vault).
 
-3. **basic-memory's Docker image serves MCP over SSE only**, and
-   Claude Code now marks the SSE transport as deprecated. It still
-   works; if basic-memory's image moves to HTTP-streamable, switch
-   `install.sh`'s Docker-mode registration to `--transport http` and
-   the `/sse` endpoint accordingly.
+3. **basic-memory's Docker image defaults to SSE**, which Claude Code
+   now marks as deprecated. It still works. `install.sh` already
+   registers whatever the container runs (`--transport sse` →
+   `sse`, `--transport streamable-http` → `http`, at the container's
+   `--path`, default `/mcp`), so switching the container's command to
+   `streamable-http` is enough; no installer change needed.
 
 4. **Docker-mode detection only recognizes the official image's
    documented layout** (see `docs/known-limitations.md` #6) — confirm
@@ -95,6 +96,15 @@ something changes upstream.
   isn't visible from the host; and basic-memory 0.18.x has no
   `project list --json`, so the installer falls back to matching the
   name cell of its table.
+
+- **Docker-mode MCP endpoint** — found in a real install against
+  basic-memory 0.18.4: the endpoint was registered as
+  `http://localhost:<port>/sse`, which returns 404. basic-memory mounts
+  both its SSE and streamable-HTTP transports at `--path` (default
+  `/mcp`), in 0.18.4 and current releases alike. `install.sh` now reads
+  the container's command (`docker inspect … .Config.Cmd`) for
+  `--transport` and `--path` and registers exactly that; confirmed
+  `✔ Connected` in `claude mcp list`.
 
 - **Layer-2 Docker tests never executed** — now run: the
   `debian:bookworm-slim` image builds and the full bats suite passes

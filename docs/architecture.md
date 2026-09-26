@@ -79,9 +79,10 @@ in this order:
    `ghcr.io/basicmachines-co/basic-memory` image (see its
    [`docker-compose.yml`](https://github.com/basicmachines-co/basic-memory/blob/main/docker-compose.yml)).
    That image serves basic-memory's MCP server over **SSE on port
-   8000** (`basic-memory mcp --transport sse --host 0.0.0.0 --port
-   8000` — SSE only, not stdio, not HTTP-streamable), and bind-mounts
-   the knowledge directory at `/app/data` inside the container.
+   8000** by default (`basic-memory mcp --transport sse --host 0.0.0.0
+   --port 8000`), at basic-memory's `--path`, which defaults to `/mcp`
+   (not `/sse`), and bind-mounts the knowledge directory at
+   `/app/data` inside the container.
 2. **CLI mode** — the `basic-memory` binary installed locally (via
    `uv`), talking to Claude Code over stdio. This is the original,
    still-default path when no Docker deployment is found.
@@ -113,8 +114,11 @@ host-side mount — not `--basic-memory-root` if one was passed and
 disagrees, and not basic-memory's own local-CLI default — since
 asynthlogr's files have to land somewhere the running container can
 actually see. MCP registration uses
-`claude mcp add --transport sse basic-memory <http://localhost:PORT/sse>`
-instead of the stdio form. Every later `basic-memory project ...` call
+`claude mcp add --transport <sse|http> basic-memory http://localhost:<PORT><path>`
+instead of the stdio form, with the transport and path read from the
+container's own command (`docker inspect … .Config.Cmd`:
+`--transport sse` → `sse`, `streamable-http` → `http`; `--path`,
+default `/mcp`). Every later `basic-memory project ...` call
 runs via `docker exec <container> basic-memory ...` rather than a bare
 `basic-memory ...`, and is given the **container-side** path
 (`/app/data/asynthlogr`), while `asynthlogr.config.json`'s
