@@ -17,8 +17,9 @@ decisions, captured without slowing anything down.
   per file reference, resolved automatically via git/gh.
 - Tracks which step of your research → clarify → propose → discuss →
   plan flow you're on, per thread.
-- Warns you (once) before you'd silently lose an in-flight subagent's
-  log entry by exiting.
+- Warns you (without ever blocking) while subagent runs are still in
+  flight, and if you exit anyway, records them as abandoned in
+  `failed-writes.log` instead of losing them silently.
 - Talks to you like a human (ADHD-optimized formatting, see
   `skills/i-have-adhd/`) for anything addressed to you; strict machine
   templates for everything agent-to-agent.
@@ -46,6 +47,8 @@ decisions, captured without slowing anything down.
 - `uv` (needed to install basic-memory if it isn't already present and
   no Docker deployment is found)
 - git + gh CLI (for resolving commit/PR links)
+- `jq` — used by the pending-run hooks at runtime, and by `install.sh`
+  to merge into an existing `.claude/settings.json`
 - Obsidian is an optional viewer on the same directory basic-memory
   manages — not itself a requirement.
 
@@ -86,15 +89,15 @@ Vault layout produced — see `docs/vault-layout.md` for full detail:
 
 ## Testing
 ```
-bats tests/unit/install_test.bats tests/unit/stop_hook_test.bats   # layer 1
-tests/docker/run.sh                                                 # layer 2 (debian:bookworm-slim)
+bats tests/unit/          # layer 1
+tests/docker/run.sh       # layer 2 (debian:bookworm-slim)
 ```
 See `tests/README.md` for what each layer covers and what it doesn't.
 
 ## Documentation
 - `docs/architecture.md` — problem statement, the 5-step flow this
   observes, core architectural principles, the race-condition fix, the
-  Stop-hook mitigation, the human/machine communication boundary
+  pending-run hooks, the human/machine communication boundary
 - `docs/vault-layout.md` — full vault directory structure
 - `docs/decision-entry-format.md` — the decision/info entry templates
 - `docs/subagent-run-format.md` — the delegation template, output.md,
@@ -107,8 +110,8 @@ See `tests/README.md` for what each layer covers and what it doesn't.
 - Model name / context-window % are self-reported by the orchestrator,
   not measured — Claude Code has no API for this. Always labeled
   unverified in the log.
-- A hard-killed session (not a clean exit) can leave a subagent run
-  logged as incomplete with no warning.
+- A hard-killed session (not a clean exit) fires no hooks, so a
+  subagent run still in flight leaves no trace in `failed-writes.log`.
 - Thread naming happens once per session; it isn't retroactively
   editable by decision-logger.
 
@@ -117,7 +120,11 @@ See `docs/known-limitations.md` for the full list with explanations.
 ## Files this installer touches
 - Creates or appends to: `AGENTS.md`, `CLAUDE.md`, `.claude/settings.json`
 - Creates: `.claude/agents/*.md`, `.claude/hooks/*`, `.claude/skills/*/`,
-  `.claude/active-thread.json`, `.claude/asynthlogr.config.json`
+  `.claude/asynthlogr/formats/*`, `.claude/asynthlogr.config.json`
+- Created later by the orchestrator, not the installer:
+  `.claude/active-thread.json` (at the start of each session)
+- Registers basic-memory as a Claude Code MCP server (local scope, for
+  the target repo)
 
 ## License
 MIT (includes vendored `i-have-adhd` skill, MIT,

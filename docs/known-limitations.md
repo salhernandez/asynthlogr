@@ -11,8 +11,12 @@ Ship with these documented, not silently.
    orchestrator, always labeled `*(unverified)*` in the rendered
    entry — never presented as measured.
 
-2. **A hard-killed session leaves no warning** — only a clean exit
-   gets the Stop-hook check (see `docs/architecture.md`).
+2. **A hard-killed session leaves no trace** — only a clean exit
+   fires `SessionEnd`, which records still-pending runs in
+   `failed-writes.log` (see `docs/architecture.md`, "Pending-run
+   hooks"). Relatedly, the `Stop`-hook warning goes to the human only;
+   it can't make the session wait for in-flight runs, by design (a
+   blocking `Stop` hook would interrupt Claude mid-session).
 
 3. **Step 3/step 5 detection is a semantic judgment**, not a platform
    event — hooks cannot detect "a solution was proposed" or "a plan
@@ -35,4 +39,4 @@ Ship with these documented, not silently.
    `docker port` can't resolve) won't be recognized, and `install.sh`
    falls back to CLI mode rather than guessing at its layout. See
    `docs/architecture.md`'s "basic-memory: CLI mode vs. Docker mode"
-   section and `docs/open-items.md` #9.
+   section and `docs/open-items.md` ("Still open" #4).

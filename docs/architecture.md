@@ -44,8 +44,8 @@ whichever decision entry follows).
 5. **Silent failure is not acceptable, but blocking is also not
    acceptable.** Failures land in a dead-letter log
    (`failed-writes.log`), never in a retry loop, never in a blocking
-   prompt (with one narrow exception at session-exit — see "Stop hook"
-   below).
+   prompt. Runs still pending when the session ends are recorded there
+   too (see "Pending-run hooks" below).
 6. **basic-memory is a hard, required dependency — not one option
    among several.** Every piece of information this system logs —
    decision/info entries, subagent-run output, both levels of
@@ -58,7 +58,9 @@ whichever decision entry follows).
    basic-memory-managed notes, are repo-local operational files that
    live outside the vault: `.claude/active-thread.json`,
    `.claude/asynthlogr.config.json`, and `failed-writes.log` (an ops
-   dead-letter log, not a knowledge artifact).
+   dead-letter log, not a knowledge artifact — `install.sh` lists it
+   in the project's `.gitignore`, which basic-memory honors, so it
+   stays out of basic-memory's index).
 7. **asynthlogr is itself a basic-memory project, not an arbitrary
    folder.** It does not get to pick an unrelated directory — its
    storage lives at `<basic-memory-root>/asynthlogr`
@@ -93,7 +95,9 @@ behavior as before this feature existed. Concretely, it checks:
 
 ```
 1. `docker` on PATH at all?
-2. `docker info` succeeds within a short timeout (daemon reachable)?
+2. `docker info` succeeds within 5 seconds (daemon reachable)? Uses
+   `timeout`, else `gtimeout`, else a background job + kill, since
+   stock macOS ships no `timeout`.
 3. `docker ps` finds a container from the official image (matched by
    ancestor image first, falling back to the compose file's documented
    container_name `basic-memory-server` in case of a locally-built
@@ -142,7 +146,7 @@ already-decided name. Same principle applies to `run_id`/`topic_slug`
 — always orchestrator-generated, synchronously, immediately before
 each dispatch, never invented by the subagent or by `decision-logger`.
 
-## Stop hook — incomplete-log warning
+## Pending-run hooks — warn, then record
 
 **Problem:** a background subagent-run write depends on its completion
 notification reaching the orchestrator in a later turn. If the session
@@ -150,32 +154,46 @@ ends first, that write never happens — silently, since it never
 touches `failed-writes.log` either (that only catches write failures,
 not "never attempted").
 
-**Mitigation:** a `Stop` hook (`hooks/check-pending-subagents.sh`)
-that warns once and lets a second exit attempt through:
+**Why not block the exit:** Claude Code's `Stop` event fires every
+time Claude finishes a response, not only when the session is about
+to end, and a blocking `Stop` hook sends its message to *Claude* and
+forces it to keep going — the human never sees it. A blocking hook
+would therefore interrupt the session mid-work whenever background
+runs were in flight, breaking principle 1. `SessionEnd`, which does
+fire on exit, can't block at all.
+
+**Mitigation:** one script, `hooks/check-pending-subagents.sh`,
+registered for both events, branching on `hook_event_name`:
 
 ```
+Both events:
 1. Read <target-repo>/.claude/active-thread.json for {vault_root, repo, thread}.
-   If missing, allow the stop — no active thread to check.
+   If missing, do nothing — no active thread to check.
 2. Scan <vault_root>/<repo>/<thread>/subagents/*/agent-use-tracking.md.
    Collect any with status: dispatched or status: running.
-3. If none pending: allow the stop.
-4. If some pending:
-   a. Check a per-session marker file, keyed by session_id.
-   b. If marker absent (first stop attempt this session):
-      write the marker, BLOCK the stop, list exactly which runs are
-      incomplete, and instruct: "Exit again to leave anyway, or wait
-      for these to finish."
-   c. If marker present (second consecutive stop attempt): allow the
-      stop regardless of pending status.
+3. If none pending: do nothing.
+
+Stop (end of every Claude response):
+4. Exit 0 with {"systemMessage": "..."} — a warning shown to the human
+   listing each pending run and saying that exiting now records them
+   as abandoned. Never blocks, keeps no state, repeats each turn while
+   runs stay pending.
+
+SessionEnd (exit, /clear, /resume; can't block):
+4. Append one line per pending run to <vault_root>/failed-writes.log:
+   <timestamp> | <repo>/<thread> | subagent-run | abandoned: <run> still <status> at session end (reason: <reason>)
+   A run already recorded as abandoned is not recorded again.
 ```
 
-See `docs/open-items.md` #2 for the one unverified detail: the exact
-mechanism a `Stop` hook uses to block and surface a message.
+This turns "silently never logged" into a dead-letter entry, with no
+blocking anywhere. `install.sh` gives the `SessionEnd` registration a
+5-second `timeout`, which raises Claude Code's default 1.5-second
+`SessionEnd` budget.
 
 **Known residual limitation (accepted, not solvable in this design):**
 a hard-killed session (container reclaimed, terminal closed without a
-clean exit, crash) never fires `Stop` at all. This mitigation only
-helps at a clean exit.
+clean exit, crash) fires neither `Stop` nor `SessionEnd`, so its
+pending runs leave no trace.
 
 ## Human vs. machine communication (scope boundary)
 

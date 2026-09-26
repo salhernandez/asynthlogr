@@ -25,9 +25,8 @@
 # is already up — if so, it hooks onto that. If not, it falls back to
 # the local CLI (installing it via uv if needed), exactly as before.
 #
-# See docs/architecture.md for what each step does and why.
-# TODO markers below are the items tracked in docs/open-items.md —
-# resolve those before relying on this script in production.
+# See docs/architecture.md for what each step does and why, and
+# docs/open-items.md for what is still unverified against live tools.
 
 set -euo pipefail
 
