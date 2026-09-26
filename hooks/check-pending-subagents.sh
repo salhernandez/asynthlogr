@@ -79,7 +79,9 @@ case "$EVENT" in
 
   SessionEnd)
     FAILED_LOG="$VAULT_ROOT/failed-writes.log"
-    now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    # Local time with offset, like every other vault timestamp; the daily
+    # report buckets lines by this date prefix.
+    now="$(date +%Y-%m-%dT%H:%M:%S%z | sed 's/\([0-9][0-9]\)$/:\1/')"
     for i in "${!PENDING_RUNS[@]}"; do
       run="${PENDING_RUNS[$i]}"
       # A resumed-then-ended session would otherwise record the same

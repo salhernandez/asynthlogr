@@ -7,6 +7,11 @@ mixed types in one file. Both formats follow
 subagent runs" section uses a wikilink, while "Files" uses standard
 markdown links, since those point outside the vault.
 
+Every entry header's timestamp is local ISO 8601 with offset —
+`## 2026-09-26T11:21:00-07:00 — <summary>` — and nothing else. The
+daily report (`docs/reports-design.md`) finds a day's entries by the
+`YYYY-MM-DD` prefix of that header.
+
 `decision-logger` appends each entry to the thread note with
 `edit_note(identifier: <thread_note>, operation: "append", ...,
 project: "asynthlogr")`. The orchestrator creates that note at session
@@ -15,7 +20,7 @@ start, so the logger never has to create it.
 ## Decision entry
 
 ```markdown
-## <timestamp> — <one-line decision summary>
+## 2026-09-26T11:21:00-07:00 — <one-line decision summary>
 
 **Type:** Decision
 **Trigger:** solution-proposed
@@ -60,7 +65,7 @@ start, so the logger never has to create it.
 ## Info entry
 
 ```markdown
-## <timestamp> — <one-line summary>
+## 2026-09-26T12:05:00-07:00 — <one-line summary>
 
 **Type:** Info
 **Trigger:** manual

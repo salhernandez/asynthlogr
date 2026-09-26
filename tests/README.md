@@ -13,9 +13,10 @@ standard runners are unlimited on public repos regardless of OS.
 bats tests/unit/
 ```
 
-48 tests total (32 for `install.sh`, 13 for the pending-run hook's
-`Stop` and `SessionEnd` branches, 3 static checks on the agent/skill
-definitions in `definitions_test.bats`), run
+62 tests total (32 for `install.sh`, 13 for the pending-run hook's
+`Stop` and `SessionEnd` branches, 14 for the daily report generator,
+3 static checks on the agent/skill definitions in
+`definitions_test.bats`), run
 directly against fixtures under `tests/fixtures/` and stubbed external
 CLIs under `tests/stubs/bin/` (`claude`, `uv`, `basic-memory`, `docker`
 — fake, deterministic, no network/auth, no real Docker daemon needed).
@@ -55,7 +56,8 @@ Windows 11). CI runs this layer on `ubuntu-latest`.
 
 ## What's NOT covered here
 
-Both layers test `install.sh`, the pending-run hook, and the static
+Both layers test `install.sh`, the pending-run hook, the report
+generator, and the static
 wiring of the agent/skill definitions — deterministic
 bash logic. Neither tests whether `decision-logger` actually writes
 valid Obsidian syntax, correct wikilinks, or whether the async

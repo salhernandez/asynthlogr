@@ -145,7 +145,7 @@ run_hook() {
   [ "$status" -eq 0 ]
   [ -z "$output" ]
   [ "$(wc -l < "$FAILED_LOG")" -eq 2 ]
-  grep -qE '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:]{8}Z \| repo-1/thread-a \| subagent-run \| abandoned: run-running still running at session end \(reason: other\)$' "$FAILED_LOG"
+  grep -qE '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:]{8}[+-][0-9]{2}:[0-9]{2} \| repo-1/thread-a \| subagent-run \| abandoned: run-running still running at session end \(reason: other\)$' "$FAILED_LOG"
   grep -qF "abandoned: run-dispatched still dispatched" "$FAILED_LOG"
   ! grep -qF "run-completed" "$FAILED_LOG"
 }

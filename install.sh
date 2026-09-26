@@ -328,7 +328,7 @@ fi
 # ---- step 7: validate target, create dirs ----
 echo "[7/13] Preparing target directories..."
 mkdir -p "$TARGET/.claude/agents" "$TARGET/.claude/hooks" "$TARGET/.claude/skills" \
-  "$TARGET/.claude/asynthlogr/formats"
+  "$TARGET/.claude/asynthlogr/formats" "$TARGET/.claude/asynthlogr/bin"
 
 # ---- step 8: copy subagent definitions ----
 echo "[8/13] Installing subagent definitions..."
@@ -343,11 +343,14 @@ for f in "$SCRIPT_DIR"/agents/*.md; do
   fi
 done
 
-# ---- step 9: copy Stop hook script + skills ----
-echo "[9/13] Installing Stop hook script and skills..."
+# ---- step 9: copy hook script, report script, skills, formats ----
+echo "[9/13] Installing hook and report scripts, skills, and formats..."
 cp "$SCRIPT_DIR/hooks/check-pending-subagents.sh" "$TARGET/.claude/hooks/check-pending-subagents.sh"
 chmod +x "$TARGET/.claude/hooks/check-pending-subagents.sh"
-for skill in i-have-adhd obsidian-notation-expert obsidian-node-link-expert; do
+# The daily report generator, run manually via the /asynthlogr-report skill.
+cp "$SCRIPT_DIR/bin/asynthlogr-report.sh" "$TARGET/.claude/asynthlogr/bin/asynthlogr-report.sh"
+chmod +x "$TARGET/.claude/asynthlogr/bin/asynthlogr-report.sh"
+for skill in i-have-adhd obsidian-notation-expert obsidian-node-link-expert asynthlogr-report; do
   mkdir -p "$TARGET/.claude/skills/$skill"
   cp "$SCRIPT_DIR/skills/$skill/SKILL.md" "$TARGET/.claude/skills/$skill/SKILL.md"
 done
@@ -474,7 +477,10 @@ echo "  asynthlogr project:   $ASYNTHLOGR_DIR  (basic-memory project 'asynthlogr
 echo "  target repo:          $TARGET"
 echo "  files touched:        AGENTS.md, CLAUDE.md, .claude/settings.json,"
 echo "                        .claude/agents/*, .claude/hooks/*, .claude/skills/*,"
-echo "                        .claude/asynthlogr/formats/*, .claude/asynthlogr.config.json"
+echo "                        .claude/asynthlogr/formats/*, .claude/asynthlogr/bin/*,"
+echo "                        .claude/asynthlogr.config.json"
+echo ""
+echo "Daily reports: run /asynthlogr-report in Claude Code (manual only)."
 echo ""
 echo "Note: .claude/active-thread.json is NOT created here — the orchestrator"
 echo "writes it itself at the start of each session (see AGENTS.md)."

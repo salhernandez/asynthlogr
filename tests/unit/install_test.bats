@@ -63,6 +63,8 @@ copy_fixture_target() {
   [ -f "$TARGET/.claude/skills/obsidian-node-link-expert/SKILL.md" ]
   [ -f "$TARGET/.claude/asynthlogr/formats/decision-entry-format.md" ]
   [ -f "$TARGET/.claude/asynthlogr/formats/subagent-run-format.md" ]
+  [ -x "$TARGET/.claude/asynthlogr/bin/asynthlogr-report.sh" ]
+  [ -f "$TARGET/.claude/skills/asynthlogr-report/SKILL.md" ]
 }
 
 @test "keeps failed-writes.log out of basic-memory's index, without duplicating the ignore line on re-run" {

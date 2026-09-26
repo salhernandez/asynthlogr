@@ -195,6 +195,14 @@ a hard-killed session (container reclaimed, terminal closed without a
 clean exit, crash) fires neither `Stop` nor `SessionEnd`, so its
 pending runs leave no trace.
 
+## Reports
+
+`/asynthlogr-report` runs `bin/asynthlogr-report.sh`, which reads the
+vault as plain files and writes one note per day,
+`reports/<YYYY-MM-DD>.md`, through basic-memory: a cross-repo summary
+table, then a section per repo and per active thread. Generation is
+manual only. See `docs/reports-design.md`.
+
 ## Human vs. machine communication (scope boundary)
 
 - **Applies ADHD-style formatting** (`skills/i-have-adhd/`) — lead

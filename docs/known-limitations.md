@@ -24,8 +24,11 @@ Ship with these documented, not silently.
    the `agent-use-tracking.md` step-transition file are the best
    available mitigation, not a guarantee.
 
-4. **Reporting (`reports/` — daily recap generation)** is referenced
-   in the vault layout but not yet designed — see `docs/open-items.md`.
+4. **Daily reports are generated only on request** (`/asynthlogr-report`,
+   or `--catch-up` for every missing day) — nothing writes them
+   automatically. Days are bucketed by each timestamp's local date
+   prefix, so a vault written from several time zones puts each entry
+   on its writer's local day (see `docs/reports-design.md`).
 
 5. **Thread naming happens once per session; it isn't retroactively
    editable by decision-logger.**

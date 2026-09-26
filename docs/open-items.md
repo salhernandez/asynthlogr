@@ -6,11 +6,10 @@ something changes upstream.
 
 ## Still open
 
-1. **Reporting system (`reports/`)** — not designed yet. Needs: how it
-   walks the vault (per-repo vs. cross-repo rollup, both were
-   requested), what triggers a run (manual command vs. scheduled), and
-   its own file/output format. A separate design pass, not part of the
-   initial build.
+1. **Reports: optional extras** — a written narrative summary,
+   weekly/monthly rollups, and deep links to individual entries (see
+   "Later" in `docs/reports-design.md`). The daily report itself is
+   done.
 
 2. **Live run inside a real Claude Code session.** Checked live against
    the official basic-memory image (0.18.4): `write_note(title,
@@ -36,6 +35,10 @@ something changes upstream.
    whether custom deployments are common enough to recognize more.
 
 ## Resolved
+
+- **Reporting system (`reports/`)** — designed and implemented:
+  `docs/reports-design.md`, `bin/asynthlogr-report.sh`, run manually
+  with `/asynthlogr-report`. One note per day with a section per repo.
 
 - **Real basic-memory MCP tool names** — checked against basic-memory's
   source (`src/basic_memory/mcp/tools/`, v0.23.x): notes are created

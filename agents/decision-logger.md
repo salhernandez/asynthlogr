@@ -28,6 +28,12 @@ Every vault write goes through basic-memory's MCP tools, always with
 session touched last. The only plain file you ever write is
 `failed-writes.log` (step 6).
 
+Every timestamp you write (entry headers, `**Timestamp:**` lines,
+`failed-writes.log`) is local ISO 8601 with offset, e.g.
+`2026-09-26T11:21:00-07:00`. Get it with
+`date +%Y-%m-%dT%H:%M:%S%z | sed 's/\([0-9][0-9]\)$/:\1/'`. The daily
+report finds a day's entries by that date prefix.
+
 Do the following, in order:
 
 1. Take `repo`, `thread`, `vault_root`, and `thread_note` from the
@@ -74,7 +80,7 @@ Do the following, in order:
    `<vault_root>/failed-writes.log` with Bash — an append, never a
    rewrite, since other background loggers may be appending too:
    ```bash
-   printf '%s | %s | %s | %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "<repo>/<thread>" "<entry_type>" "<one-line error summary>" >> "<vault_root>/failed-writes.log"
+   printf '%s | %s | %s | %s\n' "$(date +%Y-%m-%dT%H:%M:%S%z | sed 's/\([0-9][0-9]\)$/:\1/')" "<repo>/<thread>" "<entry_type>" "<one-line error summary>" >> "<vault_root>/failed-writes.log"
    ```
 
 Output nothing back to the caller — your result is not consumed.

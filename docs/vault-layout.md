@@ -31,7 +31,7 @@ stored as `basic_memory_dir` in `.claude/asynthlogr.config.json`.
           output.md                                 # this run's distilled record, written by decision-logger
 
   reports/
-    <YYYY-MM-DD>.md                                 # daily report output — NOT YET DESIGNED, see docs/open-items.md
+    <YYYY-MM-DD>.md                                 # daily report, written by /asynthlogr-report (docs/reports-design.md)
 ```
 
 `run_id` format: ISO 8601 timestamp with `:` and `.` replaced by `-`

@@ -79,6 +79,11 @@ work through your normal research → clarify → propose → discuss →
 plan flow. To log something that isn't a decision: just say "log
 this: ...".
 
+Daily reports are manual: run `/asynthlogr-report` for today so far,
+`/asynthlogr-report --date 2026-09-25` for a given day, or
+`/asynthlogr-report --catch-up` to fill in every finished day that's
+missing one. Each writes `reports/<date>.md` into the vault.
+
 Vault layout produced — see `docs/vault-layout.md` for full detail:
 ```
 <vault>/<repo>/<thread>/<thread>.md
@@ -102,6 +107,7 @@ See `tests/README.md` for what each layer covers and what it doesn't.
 - `docs/decision-entry-format.md` — the decision/info entry templates
 - `docs/subagent-run-format.md` — the delegation template, output.md,
   and both tracking-file formats
+- `docs/reports-design.md` — the daily report: format, generator, trigger
 - `docs/known-limitations.md` — what this system cannot guarantee
 - `docs/open-items.md` — unresolved implementation details a coding
   agent should verify before/while building this
@@ -120,7 +126,8 @@ See `docs/known-limitations.md` for the full list with explanations.
 ## Files this installer touches
 - Creates or appends to: `AGENTS.md`, `CLAUDE.md`, `.claude/settings.json`
 - Creates: `.claude/agents/*.md`, `.claude/hooks/*`, `.claude/skills/*/`,
-  `.claude/asynthlogr/formats/*`, `.claude/asynthlogr.config.json`
+  `.claude/asynthlogr/formats/*`, `.claude/asynthlogr/bin/*`,
+  `.claude/asynthlogr.config.json`
 - Created later by the orchestrator, not the installer:
   `.claude/active-thread.json` (at the start of each session)
 - Registers basic-memory as a Claude Code MCP server (local scope, for
