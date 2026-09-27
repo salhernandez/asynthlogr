@@ -32,7 +32,7 @@ something changes upstream.
    `streamable-http` is enough; no installer change needed.
 
 4. **Docker-mode detection only recognizes the official image's
-   documented layout** (see `docs/known-limitations.md` #6) — confirm
+   documented layout** (see `docs/known-limitations.md` #7) — confirm
    whether custom deployments are common enough to recognize more.
 
 ## Resolved

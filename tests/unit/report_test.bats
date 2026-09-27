@@ -87,6 +87,7 @@ EOF
 ---
 repo: repo-1
 thread: auth-token-refresh
+session_id: 00893aaf-19fa-41d2-8238-13269b9b3ca0
 current_step: 5
 current_step_name: plan
 ---
@@ -157,6 +158,14 @@ report_file() { echo "$VAULT/reports/$1.md"; }
   grep -qx -- '> - Should refresh also rotate the device key?' "$f"
   grep -qx -- '- 23:10 — subagent-run — abandoned: 2026-09-24T11-00-00_planning-agent-c still running at session end (reason: other)' "$f"
   grep -qx '### \[\[repo-2/ci-flake/ci-flake|ci-flake\]\]' "$f"
+}
+
+@test "shows each thread's session ID with its resume command, when recorded" {
+  "$REPORT" --config "$CONFIG" --date 2026-09-24
+  f="$(report_file 2026-09-24)"
+  grep -qxF '**Session:** `00893aaf-19fa-41d2-8238-13269b9b3ca0` · resume with `claude --resume 00893aaf-19fa-41d2-8238-13269b9b3ca0`' "$f"
+  # repo-2's thread has no tracking note, so no session line
+  [ "$(grep -c '^\*\*Session:\*\*' "$f")" -eq 1 ]
 }
 
 @test "only includes the requested day's entries" {

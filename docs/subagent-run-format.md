@@ -47,6 +47,8 @@ run_id: <orchestrator-generated timestamp>
 subagent_name: <e.g. "research-agent">
 topic_slug: <orchestrator-generated>
 run_folder: <run_id>_<subagent_name>-<topic_slug>
+agent_id: <the subagent's agent ID, as Claude Code returned it — for resuming it>
+parent_session_id: <this session's ID>
 prompt_used: >
   <exact prompt/task text sent to the subagent>
 questions_asked:
@@ -80,6 +82,9 @@ model_reported: <orchestrator's best-guess current model — ALWAYS labeled unve
 **Timestamp:** <ISO8601>
 **Invoked by:** orchestrator (main)
 **Thread:** [[<repo>/<thread-name>/<thread-name>|<thread-name>]]
+**Agent ID:** `<agent_id>`
+**Parent session:** `<parent_session_id>`
+**Resume:** `claude --resume <parent_session_id>`, then ask Claude to continue agent `<agent_id>`
 
 ## Prompt used
 <the exact prompt/task text the orchestrator sent to this subagent>
@@ -121,6 +126,8 @@ run_id: 2026-09-26T11-14-51
 subagent_name: research-agent
 topic_slug: rate-limit-handling
 status: running        # dispatched | running | completed | failed
+agent_id: agent-a1b2c3d4            # set by the subagent from its SubagentStart note
+parent_session_id: 00893aaf-19fa-41d2-8238-13269b9b3ca0
 started_at: 2026-09-26T11:14:51-07:00
 updated_at: 2026-09-26T11:15:40-07:00
 ---
@@ -139,6 +146,8 @@ updated_at: 2026-09-26T11:15:40-07:00
 ---
 repo: repo-1
 thread: auth-token-refresh
+session_id: 00893aaf-19fa-41d2-8238-13269b9b3ca0   # from the SessionStart hook
+session_transcript: /Users/.../.claude/projects/.../00893aaf-19fa-41d2-8238-13269b9b3ca0.jsonl
 current_step: 3
 current_step_name: proposing-solution
 updated_at: 2026-09-26T11:21:00-07:00

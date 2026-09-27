@@ -59,6 +59,7 @@ copy_fixture_target() {
   [ -f "$TARGET/.claude/agents/research-agent.md" ]
   [ -f "$TARGET/.claude/agents/planning-agent.md" ]
   [ -x "$TARGET/.claude/hooks/check-pending-subagents.sh" ]
+  [ -x "$TARGET/.claude/hooks/session-ids.sh" ]
   [ -f "$TARGET/.claude/skills/i-have-adhd/SKILL.md" ]
   [ -f "$TARGET/.claude/skills/obsidian-notation-expert/SKILL.md" ]
   [ -f "$TARGET/.claude/skills/obsidian-node-link-expert/SKILL.md" ]
@@ -219,6 +220,9 @@ copy_fixture_target() {
   jq -e '.hooks.SessionEnd[0].hooks[0].command | endswith("/.claude/hooks/check-pending-subagents.sh")' "$settings" >/dev/null
   # raises Claude Code's default 1.5s SessionEnd budget
   [ "$(jq -r '.hooks.SessionEnd[0].hooks[0].timeout' "$settings")" -ge 2 ]
+  # session/agent IDs for resuming
+  jq -e '.hooks.SessionStart[0].hooks[0].command | endswith("/.claude/hooks/session-ids.sh")' "$settings" >/dev/null
+  jq -e '.hooks.SubagentStart[0].hooks[0].command | endswith("/.claude/hooks/session-ids.sh")' "$settings" >/dev/null
 }
 
 @test "re-running the installer does not duplicate hook registrations" {
@@ -230,6 +234,8 @@ copy_fixture_target() {
   settings="$TARGET/.claude/settings.json"
   [ "$(jq '[.hooks.Stop[].hooks[] | select(.command | contains("check-pending-subagents.sh"))] | length' "$settings")" -eq 1 ]
   [ "$(jq '[.hooks.SessionEnd[].hooks[] | select(.command | contains("check-pending-subagents.sh"))] | length' "$settings")" -eq 1 ]
+  [ "$(jq '[.hooks.SessionStart[].hooks[] | select(.command | contains("session-ids.sh"))] | length' "$settings")" -eq 1 ]
+  [ "$(jq '[.hooks.SubagentStart[].hooks[] | select(.command | contains("session-ids.sh"))] | length' "$settings")" -eq 1 ]
   [ "$(jq -r '.hooks.Stop | length' "$settings")" -eq 2 ]
 }
 
@@ -259,6 +265,43 @@ copy_fixture_target() {
 
   count="$(grep -c "## Decision & Activity Logging Protocol" "$TARGET/AGENTS.md")"
   [ "$count" -eq 1 ]
+}
+
+@test "--force refreshes the protocol between its markers and keeps the rest of AGENTS.md" {
+  copy_fixture_target existing-agents
+  "$INSTALL_SH" "$TARGET"
+  # simulate an outdated protocol inside the block, plus user content after it
+  sed -i.bak 's/Follow this exactly\./OLD PROTOCOL TEXT/' "$TARGET/AGENTS.md" && rm -f "$TARGET/AGENTS.md.bak"
+  echo "## My notes after the block" >> "$TARGET/AGENTS.md"
+
+  run "$INSTALL_SH" "$TARGET" --force
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"refreshed the logging protocol in AGENTS.md"* ]]
+  ! grep -q "OLD PROTOCOL TEXT" "$TARGET/AGENTS.md"
+  grep -q "Do not touch this." "$TARGET/AGENTS.md"
+  grep -qx "## My notes after the block" "$TARGET/AGENTS.md"
+  [ "$(grep -c "## Decision & Activity Logging Protocol" "$TARGET/AGENTS.md")" -eq 1 ]
+}
+
+@test "without --force, an existing protocol block is left as is" {
+  copy_fixture_target existing-agents
+  "$INSTALL_SH" "$TARGET"
+  sed -i.bak 's/Follow this exactly\./OLD PROTOCOL TEXT/' "$TARGET/AGENTS.md" && rm -f "$TARGET/AGENTS.md.bak"
+
+  run "$INSTALL_SH" "$TARGET"
+  [ "$status" -eq 0 ]
+  grep -q "OLD PROTOCOL TEXT" "$TARGET/AGENTS.md"
+}
+
+@test "--force replaces an unmarked AGENTS.md the installer created before markers existed" {
+  copy_fixture_target empty
+  { echo "## Decision & Activity Logging Protocol"; echo ""; echo "OLD PROTOCOL TEXT"; } > "$TARGET/AGENTS.md"
+
+  run "$INSTALL_SH" "$TARGET" --force
+  [ "$status" -eq 0 ]
+  ! grep -q "OLD PROTOCOL TEXT" "$TARGET/AGENTS.md"
+  grep -q "^<!-- asynthlogr:begin" "$TARGET/AGENTS.md"
+  grep -qx "<!-- asynthlogr:end -->" "$TARGET/AGENTS.md"
 }
 
 @test "appends the AGENTS.md pointer to an existing CLAUDE.md" {

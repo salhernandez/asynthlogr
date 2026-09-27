@@ -212,6 +212,32 @@ a hard-killed session (container reclaimed, terminal closed without a
 clean exit, crash) fires neither `Stop` nor `SessionEnd`, so its
 pending runs leave no trace.
 
+## Session and subagent IDs (for resuming)
+
+Every thread records the Claude Code session it ran in, and every
+subagent run records its agent ID, so either conversation can be
+picked up again later. The IDs always come from Claude Code itself,
+through `hooks/session-ids.sh`, never from a model's guess:
+
+- **SessionStart** prints the session's ID and transcript path as
+  plain text, which Claude Code adds to the orchestrator's context.
+  The orchestrator writes them into the thread tracking note
+  (`session_id`, `session_transcript`) and into the thread note's
+  header: `**Session:** <id> · resume with claude --resume <id>`.
+- **SubagentStart** injects, via `additionalContext`, the subagent's
+  own `agent_id` and its parent `session_id` — only for subagents whose
+  definition carries a "## Tracking Contract". The subagent records
+  both in its tracking note when it sets `status: running`.
+  `decision-logger` also puts them in the run's `output.md`, taking the
+  `agent_id` the orchestrator gets back with the subagent's result.
+
+To resume: `claude --resume <session_id>` for a session. A subagent is
+resumed from inside its parent session: resume the parent, then ask
+Claude to continue that agent (it sends a message to the `agent_id`).
+Built-in Explore and Plan agents return no agent ID and can't be
+resumed. The daily report shows each thread's session ID with its
+resume command.
+
 ## Reports
 
 `/asynthlogr-report` runs `bin/asynthlogr-report.sh`, which reads the

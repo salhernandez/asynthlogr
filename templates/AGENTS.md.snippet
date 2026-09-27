@@ -32,6 +32,10 @@ Determine and fix for the rest of this session:
   mid-session — one session, one thread name, decided once.
 - Read `.claude/asynthlogr.config.json` for `basic_memory_dir` (used
   as `vault_root` below) and `basic_memory_project_path`.
+- `session_id` and `session_transcript`: copy them from the
+  `asynthlogr: this Claude Code session's ID is …` note a SessionStart
+  hook put in your context (it also gives the transcript path). Never
+  guess them; use `unknown` if the note is missing.
 
 Then, synchronously, in this order:
 0. Make sure the `asynthlogr` project exists: call
@@ -42,10 +46,10 @@ Then, synchronously, in this order:
 1. Create the thread note decision-logger will append entries to (it
    only ever appends, so two background loggers can never race to
    create it):
-   `write_note(title: "<thread>", directory: "<repo>/<thread>", content: "# <thread>\n", tags: "asynthlogr-thread", project: "asynthlogr")`
+   `` write_note(title: "<thread>", directory: "<repo>/<thread>", content: "# <thread>\n\n**Session:** `<session_id>` · resume with `claude --resume <session_id>`\n", tags: "asynthlogr-thread", project: "asynthlogr") ``
    → keep its permalink as `thread_note`.
 2. Create the thread-level tracking note:
-   `write_note(title: "agent-use-tracking", directory: "<repo>/<thread>", content: "# Step log\n- <ISO8601> — step 1 (research) started\n", metadata: {repo: "<repo>", thread: "<thread>", current_step: 1, current_step_name: "research", updated_at: "<ISO8601>"}, project: "asynthlogr")`
+   `write_note(title: "agent-use-tracking", directory: "<repo>/<thread>", content: "# Step log\n- <ISO8601> — step 1 (research) started\n", metadata: {repo: "<repo>", thread: "<thread>", session_id: "<session_id>", session_transcript: "<session_transcript>", current_step: 1, current_step_name: "research", updated_at: "<ISO8601>"}, project: "asynthlogr")`
    → keep its permalink.
 3. Write `.claude/active-thread.json` with a plain file write (this
    one file is repo-local operational config, not vault content, so
@@ -69,7 +73,15 @@ Before dispatching:
 
 When the subagent's result surfaces (even later, even in the
 background): dispatch `decision-logger` in the background — do not
-wait on it — with `entry_type: subagent-run`.
+wait on it — with `entry_type: subagent-run`, including the
+subagent's `agent_id` (Claude Code returns it with the subagent's
+result) and `parent_session_id` (this session's `session_id`).
+
+### Resuming logged conversations
+- A session: `claude --resume <session_id>` (or the transcript path).
+- A subagent: resume its parent session first, then ask to continue
+  that agent; resume it with `SendMessage` to its `agent_id`. Built-in
+  Explore and Plan agents return no agent ID and can't be resumed.
 
 ### At step 3 (solution proposed) and step 5 (plan finalized)
 Dispatch `decision-logger` in the background with `entry_type: decision`.
@@ -96,7 +108,10 @@ as `run_folder` names so the logger can link them.
 ### Tracking Contract (applies to every subagent you dispatch with a
 tracking note — research-agent, planning-agent, and any added later;
 decision-logger is exempt, since it is never given one)
-- First thing: set `status: running` via `edit_note` `metadata`.
+- First thing: set `status: running` via `edit_note` `metadata`, along
+  with `agent_id` and `parent_session_id` from the
+  `asynthlogr: your agent_id is …` note a SubagentStart hook put in
+  your context.
 - After every tool call, append one line to the note's "# Run log":
   `- <HH:MM:SS> — tool call: <tool name>` (or, for a clarifying
   question, `- <HH:MM:SS> — asked clarifying question: "<question>"`).

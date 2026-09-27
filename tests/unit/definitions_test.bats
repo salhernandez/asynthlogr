@@ -48,6 +48,13 @@ frontmatter() {
   done
 }
 
+@test "every tracked subagent records its agent_id, for resuming" {
+  for agent in "$REPO_ROOT"/agents/*.md; do
+    grep -q '^## Tracking Contract' "$agent" || continue
+    grep -q 'agent_id' "$agent" || { echo "$(basename "$agent"): Tracking Contract doesn't record agent_id" >&2; return 1; }
+  done
+}
+
 @test "every bats test name is plain ASCII" {
   # bats on Windows (Git Bash) can't look up a test whose name has
   # non-ASCII characters, e.g. an em dash, and aborts the whole run.

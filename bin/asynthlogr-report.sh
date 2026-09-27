@@ -223,12 +223,17 @@ render_day() {
     echo "$decisions $info $runs $failed" >> "$counts/$repo"
 
     step="$(step_as_of "$td/agent-use-tracking.md" "$d")"
+    session="$(fm_value "$td/agent-use-tracking.md" session_id)"
+    heading="### [[$repo/$thread/$thread|$thread]]"
+    [ -z "$step" ] || heading="$heading · step $step"
     {
       echo ""
-      if [ -n "$step" ]; then
-        echo "### [[$repo/$thread/$thread|$thread]] · step $step"
-      else
-        echo "### [[$repo/$thread/$thread|$thread]]"
+      echo "$heading"
+      # The session the thread ran in, ready to resume (from the
+      # SessionStart hook, recorded by the orchestrator).
+      if [ -n "$session" ] && [ "$session" != "unknown" ]; then
+        echo ""
+        echo "**Session:** \`$session\` · resume with \`claude --resume $session\`"
       fi
       if [ "$decisions" -gt 0 ]; then
         echo ""; echo "**Decisions**"

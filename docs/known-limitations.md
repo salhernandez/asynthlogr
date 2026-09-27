@@ -33,7 +33,15 @@ Ship with these documented, not silently.
 5. **Thread naming happens once per session; it isn't retroactively
    editable by decision-logger.**
 
-6. **basic-memory-via-Docker detection only recognizes the official
+6. **Resuming a subagent needs its parent session.** Its `agent_id`
+   is only meaningful inside the session that spawned it, so resume
+   that session first (`claude --resume <parent_session_id>`), then
+   ask Claude to continue the agent. Built-in Explore and Plan agents
+   can't be resumed at all. The IDs come from hooks, but a model still
+   copies them into the notes; a note may say `unknown` if a hook's
+   message was missing.
+
+7. **basic-memory-via-Docker detection only recognizes the official
    image's documented layout** — a container from
    `ghcr.io/basicmachines-co/basic-memory` with a real `/app/data`
    bind mount and a published port for its container port 8000. A

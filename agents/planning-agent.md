@@ -23,8 +23,11 @@ You will be given a tracking note at the start of your task: its
 current yourself, directly, via basic-memory's MCP tools, always with
 `project: "asynthlogr"` — do not delegate it, do not skip it on a
 short/simple task:
-- First thing, before any other tool call: mark the run as started —
-  `edit_note(identifier: <permalink>, operation: "append", content: "- <HH:MM:SS> — running", metadata: {status: "running", updated_at: "<ISO8601 now>"}, project: "asynthlogr")`.
+- First thing, before any other tool call: mark the run as started,
+  and record the IDs a SubagentStart hook gave you in an
+  `asynthlogr: your agent_id is …` note (copy them exactly; never
+  guess) —
+  `edit_note(identifier: <permalink>, operation: "append", content: "- <HH:MM:SS> — running", metadata: {status: "running", agent_id: "<agent_id>", parent_session_id: "<parent session id>", updated_at: "<ISO8601 now>"}, project: "asynthlogr")`.
 - After every tool call, append one line to its "# Run log":
   `- <HH:MM:SS> — tool call: <tool name>` (or, for a clarifying
   question you ask, `- <HH:MM:SS> — asked clarifying question: "<question>"`).

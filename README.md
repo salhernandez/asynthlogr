@@ -17,6 +17,9 @@ decisions, captured without slowing anything down.
   per file reference, resolved automatically via git/gh.
 - Tracks which step of your research → clarify → propose → discuss →
   plan flow you're on, per thread.
+- Records the Claude Code session ID of every thread and the agent ID
+  of every subagent run (straight from Claude Code's hooks), so you can
+  resume either conversation later: `claude --resume <session_id>`.
 - Warns you (without ever blocking) while subagent runs are still in
   flight, and if you exit anyway, records them as abandoned in
   `failed-writes.log` instead of losing them silently.

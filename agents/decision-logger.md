@@ -50,7 +50,10 @@ Do the following, in order:
      and create it:
      `write_note(title: "output", directory: "<repo>/<thread>/subagents/<run_folder>", content: <entry>, project: "asynthlogr", tags: "subagent-run")`.
      Do NOT touch `agent-use-tracking.md` in that folder — it belongs
-     to the subagent that ran, not to you.
+     to the subagent that ran, not to you. Fill the **Agent ID**,
+     **Parent session** and **Resume** lines from the block's
+     `agent_id` and `parent_session_id`, copied exactly; leave out a
+     line whose value is missing or `unknown` rather than guessing.
 
 3. Resolve file/commit/PR references yourself — do not trust the
    caller's `files_touched` list as complete or line-accurate:
