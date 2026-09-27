@@ -550,6 +550,3 @@ echo "                        .claude/asynthlogr/formats/*, .claude/asynthlogr/b
 echo "                        .claude/asynthlogr.config.json"
 echo ""
 echo "Daily reports: run /asynthlogr-report in Claude Code (manual only)."
-echo ""
-echo "Note: .claude/active-thread.json is NOT created here — the orchestrator"
-echo "writes it itself at the start of each session (see AGENTS.md)."

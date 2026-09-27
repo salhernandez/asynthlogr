@@ -75,6 +75,35 @@ related_runs:
 model_reported: <orchestrator's best-guess current model — ALWAYS labeled unverified, omit if unknown>
 ```
 
+## `subagents/<run>/output.md` placeholder (written by the orchestrator)
+
+Written right after the dispatch returns the subagent's `agent_id`,
+long before the run finishes. Nothing waits on the subagent: if its
+result is never logged (the session ends first, the logger fails),
+this note still says where the output lives.
+
+```markdown
+# Subagent run — <subagent name>
+**Status:** not logged yet. If this note still says so, the run's final output was never written here — resume the subagent, or read its transcript, below.
+**Timestamp:** <ISO8601, at dispatch>
+**Invoked by:** orchestrator (main)
+**Thread:** [[<repo>/<thread-name>/<thread-name>|<thread-name>]]
+**Agent ID:** `<agent_id>`
+**Parent session:** `<session_id>`
+**Resume:** `claude --resume <session_id>`, then ask Claude to continue agent `<agent_id>`
+**Transcript:** `<directory of session_transcript>/<session_id>/subagents/agent-<agent_id>.jsonl`
+```
+
+Leave out the **Agent ID**, **Parent session**, **Resume** and
+**Transcript** lines when the dispatch returned no `agent_id` (built-in
+Explore and Plan agents return none and can't be resumed).
+
+Written with `write_note(title: "output", directory:
+"<repo>/<thread>/subagents/<run_folder>", ..., tags: ["subagent-run",
+"subagent-run-pending"], project: "asynthlogr")`. The
+`subagent-run-pending` tag is how the daily report counts runs whose
+output was never logged.
+
 ## `subagents/<run>/output.md` format (written by decision-logger)
 
 ```markdown
@@ -109,16 +138,21 @@ resolves links by title or permalink, never relative to the linking
 note.
 
 Written with `write_note(title: "output", directory:
-"<repo>/<thread>/subagents/<run_folder>", ..., project: "asynthlogr")`.
+"<repo>/<thread>/subagents/<run_folder>", ..., tags: "subagent-run",
+project: "asynthlogr")`, which replaces the orchestrator's placeholder
+(same title and directory) and drops its `subagent-run-pending` tag.
 
 ## `subagents/<run>/agent-use-tracking.md` (written live by the subagent itself)
 
 Created by the orchestrator with `status: dispatched` just before
 dispatch; the subagent then sets `running` as its first action and
-`completed`/`failed` as its last. Frontmatter fields are written
-through `write_note`/`edit_note`'s `metadata` argument (basic-memory
-also adds its own `title`, `type`, and `permalink` fields). The
-pending-run hooks read `status` directly from this file.
+`completed`/`failed` as its last. basic-memory's tools take no
+`metadata` argument: `write_note` reads frontmatter from a YAML block
+at the top of `content`, and later changes are `read_note` +
+`edit_note`'s `find_replace` on lines copied verbatim from what
+`read_note` returned (basic-memory reformats stored values, e.g.
+timestamps, and adds its own `title`, `type`, and `permalink` fields).
+The daily report reads `status` directly from this file.
 
 ```markdown
 ---

@@ -55,6 +55,17 @@ frontmatter() {
   done
 }
 
+@test "no instruction passes a metadata argument to write_note or edit_note" {
+  # basic-memory's MCP tools take no metadata argument; frontmatter goes
+  # in content, and later changes go through find_replace. Calls can
+  # span lines and hold parens, so match each up to the ")`" closing
+  # its code span.
+  found="$(perl -0ne 'while (/(?:write|edit)_note\((.*?)\)`/gs) { print "$ARGV: $&\n" if $1 =~ /metadata\s*:/ }' \
+    "$REPO_ROOT"/agents/*.md "$REPO_ROOT"/templates/AGENTS.md.snippet "$REPO_ROOT"/skills/*/SKILL.md \
+    "$REPO_ROOT"/docs/subagent-run-format.md "$REPO_ROOT"/docs/decision-entry-format.md)"
+  [ -z "$found" ] || { echo "$found" >&2; return 1; }
+}
+
 @test "every bats test name is plain ASCII" {
   # bats on Windows (Git Bash) can't look up a test whose name has
   # non-ASCII characters, e.g. an em dash, and aborts the whole run.

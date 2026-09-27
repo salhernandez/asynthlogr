@@ -47,8 +47,12 @@ Do the following, in order:
    - `info`: render the lightweight block (decision-entry-format.md)
      and append it the same way.
    - `subagent-run`: render the output block (subagent-run-format.md)
-     and create it:
+     and write it over the placeholder the orchestrator left in that
+     run folder (same title and directory, so `write_note` replaces
+     it; if there's no placeholder, this creates the note):
      `write_note(title: "output", directory: "<repo>/<thread>/subagents/<run_folder>", content: <entry>, project: "asynthlogr", tags: "subagent-run")`.
+     Pass only `subagent-run` as the tag: dropping the placeholder's
+     `subagent-run-pending` tag is what marks the run as logged.
      Do NOT touch `agent-use-tracking.md` in that folder — it belongs
      to the subagent that ran, not to you. Fill the **Agent ID**,
      **Parent session** and **Resume** lines from the block's
