@@ -50,7 +50,15 @@ whichever decision entry follows).
    among several.** Every piece of information this system logs —
    decision/info entries, subagent-run output, both levels of
    `agent-use-tracking.md` — is written through the basic-memory MCP
-   server, by whichever agent owns that file. `install.sh` ensures
+   server, by whichever agent owns that file. So is everything
+   asynthlogr's own scripts do: `install.sh` creates and checks the
+   `asynthlogr` project, and the report script writes its notes, with
+   MCP tools (`bin/mcp-client.sh`, a curl-only MCP client), never the
+   basic-memory CLI. Besides keeping one writer, this matters in Docker
+   mode: a long-running server keeps the config it loaded at startup
+   and, on its next project sync, deletes any project it doesn't know
+   ("deleted from config, source of truth"), including one a separate
+   CLI process just added. `install.sh` ensures
    basic-memory is reachable one of two ways (see "basic-memory: CLI
    mode vs. Docker mode" below) and registers its Claude Code MCP
    server if needed — it does not just check and fail. The only files
@@ -64,9 +72,11 @@ whichever decision entry follows).
 7. **asynthlogr is itself a basic-memory project, not an arbitrary
    folder.** It does not get to pick an unrelated directory — its
    storage lives at `<basic-memory-root>/asynthlogr`
-   (`~/basic-memory/asynthlogr` by default) and is registered with
-   `basic-memory project add asynthlogr <path>`, exactly like any other
-   project a basic-memory user might create. This means the vault this
+   (`~/basic-memory/asynthlogr` by default) and is registered with the
+   `create_memory_project` MCP tool, exactly like any other project a
+   basic-memory user might create. The orchestrator re-checks it with
+   `list_memory_projects` at every session start and recreates it if a
+   server has lost it. This means the vault this
    system writes to shows up naturally alongside the user's other
    basic-memory projects, not as a separate, disconnected store.
 
@@ -118,15 +128,18 @@ actually see. MCP registration uses
 instead of the stdio form, with the transport and path read from the
 container's own command (`docker inspect … .Config.Cmd`:
 `--transport sse` → `sse`, `streamable-http` → `http`; `--path`,
-default `/mcp`). Every later `basic-memory project ...` call
-runs via `docker exec <container> basic-memory ...` rather than a bare
-`basic-memory ...`, and is given the **container-side** path
-(`/app/data/asynthlogr`), while `asynthlogr.config.json`'s
+default `/mcp`). The installer then talks to that same endpoint over
+MCP (`list_memory_projects`, `create_memory_project`) and gives it the
+**container-side** path (`/app/data/asynthlogr`), while
+`asynthlogr.config.json`'s
 `basic_memory_dir` still records the **host-side** path (what a human
 or Obsidian would open). `basic_memory_mode` (`"cli"` or `"docker"`)
 is recorded in that same config file so any downstream tooling can
-tell which one is in play; Docker mode additionally records
-`basic_memory_docker_container` and `basic_memory_mcp_endpoint`.
+tell which one is in play, along with `basic_memory_project_path` (the
+path as basic-memory sees it); Docker mode additionally records
+`basic_memory_docker_container`, `basic_memory_mcp_endpoint` and
+`basic_memory_mcp_transport`. In CLI mode the installer speaks MCP over
+stdio to `basic-memory mcp`, the same server Claude Code launches.
 
 If a basic-memory container exists but doesn't match this exact,
 documented layout (no recognizable `/app/data` mount, or no reachable

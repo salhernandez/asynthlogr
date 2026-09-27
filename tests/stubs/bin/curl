@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# Deterministic stub for `curl`, used only in tests, playing basic-memory's
+# MCP endpoint for bin/mcp-client.sh. The server logic itself lives in
+# mcp-stub-respond, next to this file.
+#
+#   GET with -N (SSE stream): announces a POST endpoint, then emits the
+#     responses the POSTs produce, ending after the tools/call (id 2).
+#   POST with -d (JSON-RPC, "@file" or inline): streamable HTTP (the
+#     request sends an Accept header) answers inline, and writes an
+#     Mcp-Session-Id header when asked with -D; SSE posts put the
+#     response onto the stream.
+#
+#   CURL_STUB_FAIL=1   every call fails as if the server were unreachable
+set -euo pipefail
+
+STATE_DIR="${BM_STUB_STATE_DIR:?BM_STUB_STATE_DIR must be set}"
+mkdir -p "$STATE_DIR"
+SSE_FILE="$STATE_DIR/curl-sse-responses"
+RESPOND="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/mcp-stub-respond"
+
+[ "${CURL_STUB_FAIL:-0}" != "1" ] || exit 7
+
+body="" headers_file="" stream=false url="" http=false
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -d) body="$2"; shift 2 ;;
+    -D) headers_file="$2"; shift 2 ;;
+    -N) stream=true; shift ;;
+    -H) case "$2" in [Aa]ccept:*) http=true ;; esac; shift 2 ;;
+    -m|-o) shift 2 ;;
+    -*) shift ;;
+    *) url="$1"; shift ;;
+  esac
+done
+echo "$url" >> "$STATE_DIR/curl-urls.txt"
+case "$body" in @*) body="$(cat "${body#@}")" ;; esac
+
+if [ "$stream" = true ]; then
+  : > "$SSE_FILE"
+  printf 'event: endpoint\ndata: /messages/?session_id=stub\n\n'
+  for _ in $(seq 1 100); do
+    if grep -qE '"id": ?2[,}]' "$SSE_FILE"; then
+      sed 's/^/data: /' "$SSE_FILE"
+      exit 0
+    fi
+    sleep 0.1
+  done
+  exit 0
+fi
+
+response="$(printf '%s' "$body" | "$RESPOND")"
+if [ "$http" = true ]; then
+  [ -z "$headers_file" ] || printf 'HTTP/1.1 200 OK\r\nmcp-session-id: stub-session\r\n\r\n' > "$headers_file"
+  [ -z "$response" ] || echo "$response"
+elif [ -n "$response" ]; then
+  echo "$response" >> "$SSE_FILE"
+fi

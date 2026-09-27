@@ -97,6 +97,17 @@ something changes upstream.
   `project list --json`, so the installer falls back to matching the
   name cell of its table.
 
+- **The `asynthlogr` project vanished after install (Docker mode)** —
+  found on a real install: `docker exec … basic-memory project add`
+  wrote config.json and the database, but the running MCP server kept
+  its startup config and, on the next client connection, deleted the
+  project ("deleted from config, source of truth"). Everything
+  asynthlogr does with basic-memory now goes through MCP tools
+  (`bin/mcp-client.sh`): the installer creates the project with
+  `create_memory_project` via the running server, the report writes
+  with `write_note`, and the orchestrator re-checks the project at
+  session start. Verified live: the project survives reconnects.
+
 - **Docker-mode MCP endpoint** — found in a real install against
   basic-memory 0.18.4: the endpoint was registered as
   `http://localhost:<port>/sse`, which returns 404. basic-memory mounts

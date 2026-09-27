@@ -32,6 +32,10 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Every basic-memory interaction goes through its MCP server, never the
+# basic-memory CLI (see bin/mcp-client.sh for why).
+# shellcheck source=bin/mcp-client.sh
+. "$SCRIPT_DIR/bin/mcp-client.sh"
 
 TARGET=""
 BASIC_MEMORY_ROOT=""
@@ -56,18 +60,6 @@ usage() {
   exit 1
 }
 
-# Runs a `basic-memory` subcommand against whichever deployment was
-# detected — the local CLI, or `docker exec` into the running container.
-# Every later step that needs to talk to basic-memory's CLI goes through
-# this instead of calling `basic-memory` directly.
-bm() {
-  if [ "$BM_MODE" = "docker" ]; then
-    docker exec "$BM_DOCKER_CONTAINER" basic-memory "$@"
-  else
-    basic-memory "$@"
-  fi
-}
-
 # Maps a bind-mount source reported by `docker inspect` to a path this
 # shell can use. Docker Desktop on Windows reports sources as paths inside
 # its VM (/run/desktop/mnt/host/c/Users/...), which exist nowhere on the
@@ -89,24 +81,6 @@ host_path_from_docker() {
       ;;
     *) echo "$src" ;;
   esac
-}
-
-# True if basic-memory already has a project named exactly "asynthlogr".
-# `project list --json` ({"projects": [{"name": ...}]}) only exists in
-# newer basic-memory; older releases (e.g. 0.18.x, still the cached
-# `latest` in many Docker setups) print only a table.
-bm_has_asynthlogr_project() {
-  local out
-  if out="$(bm project list --json 2>/dev/null)"; then
-    echo "$out" | grep -qE '"name"[[:space:]]*:[[:space:]]*"asynthlogr"'
-  else
-    # Table rows look like "│ asynthlogr │ /asynthlogr │ │"; match the
-    # whole first cell so "asynthlogr-old" doesn't count. "│" is multibyte,
-    # so use alternation, not a bracket expression (which breaks under
-    # the C locale); a literal "|" is [|], since BSD grep reads a
-    # backslash-pipe in -E patterns as alternation.
-    bm project list 2>/dev/null | grep -qE '^(│|[|])[[:space:]]*asynthlogr[[:space:]]*(│|[|])'
-  fi
 }
 
 # Runs "$@" with a time limit of $1 seconds. `timeout` is GNU coreutils,
@@ -249,6 +223,15 @@ else
   fi
   BM_MODE="cli"
 fi
+# The MCP server the installer talks to: the running container's, or a
+# stdio server from the local CLI (the same one Claude Code will launch).
+if [ "$BM_MODE" = "docker" ]; then
+  MCP_TRANSPORT="$BM_DOCKER_TRANSPORT"
+  MCP_TARGET="$BM_DOCKER_URL"
+else
+  MCP_TRANSPORT="stdio"
+  MCP_TARGET="basic-memory mcp"
+fi
 
 # ---- step 3: ensure basic-memory is registered as an MCP server for Claude Code ----
 echo "[3/13] Checking basic-memory is registered as a Claude Code MCP server..."
@@ -292,20 +275,19 @@ mkdir -p "$BASIC_MEMORY_ROOT"
 BASIC_MEMORY_ROOT="$(cd "$BASIC_MEMORY_ROOT" && pwd)"
 
 # ---- step 5: ensure basic-memory itself is initialized ----
-echo "[5/13] Ensuring basic-memory is initialized..."
-# basic-memory has no explicit init command — it creates its config
-# (~/.basic-memory/config.json) and default project on first use.
-# Running `project list` once is enough to trigger that if it hasn't
-# happened yet. In Docker mode the container already did this on its
-# own first start, but the check is harmless and confirms it's alive.
-if ! bm project list >/dev/null 2>&1; then
-  echo "ERROR: 'basic-memory project list' failed"
+echo "[5/13] Ensuring basic-memory's MCP server answers..."
+# Listing projects over MCP both confirms the server works and, on a
+# fresh CLI install, lets basic-memory create its config and default
+# project on first use.
+if ! BM_PROJECTS="$(mcp_call "$MCP_TRANSPORT" "$MCP_TARGET" list_memory_projects '{}' 2>&1)"; then
+  echo "ERROR: basic-memory's MCP server didn't answer list_memory_projects"
+  echo "  ($MCP_TRANSPORT: $MCP_TARGET):"
+  echo "  $BM_PROJECTS" | cut -c1-400
   if [ "$BM_MODE" = "docker" ]; then
-    echo "(via docker exec into $BM_DOCKER_CONTAINER)."
-    echo "The container is up but basic-memory inside it isn't responding —"
-    echo "check 'docker logs $BM_DOCKER_CONTAINER' before re-running this installer."
+    echo "The container is up but its MCP server isn't responding — check"
+    echo "'docker logs $BM_DOCKER_CONTAINER' before re-running this installer."
   else
-    echo ". basic-memory does not appear to be working correctly even after"
+    echo "basic-memory does not appear to be working correctly even after"
     echo "install. Check the basic-memory installation manually before"
     echo "re-running this installer."
   fi
@@ -317,7 +299,7 @@ echo "  basic-memory is initialized."
 echo "[6/13] Registering asynthlogr as its own basic-memory project..."
 ASYNTHLOGR_DIR="$BASIC_MEMORY_ROOT/asynthlogr"
 mkdir -p "$ASYNTHLOGR_DIR"
-# The path passed to `basic-memory project add` must be a path *as
+# The path passed to create_memory_project must be a path *as
 # basic-memory itself sees it* — in Docker mode that's the container-side
 # path under /app/data, not the host path, even though ASYNTHLOGR_DIR
 # above (used for config.json and for humans/Obsidian) is the host path.
@@ -326,10 +308,26 @@ if [ "$BM_MODE" = "docker" ]; then
 else
   ASYNTHLOGR_PROJECT_PATH="$ASYNTHLOGR_DIR"
 fi
-if bm_has_asynthlogr_project; then
+# Through MCP in both modes. In Docker mode this matters beyond
+# consistency: a long-running server keeps the config it loaded at
+# startup, and on its next project sync deletes any project it doesn't
+# know about ("deleted from config, source of truth") — including one a
+# separate basic-memory CLI process just added. Creating the project
+# through the server updates its in-memory config, config.json and its
+# database together.
+if mcp_lists_project "$BM_PROJECTS" asynthlogr; then
   echo "  'asynthlogr' project already registered."
 else
-  bm project add asynthlogr "$ASYNTHLOGR_PROJECT_PATH"
+  if ! mcp_result="$(mcp_call "$MCP_TRANSPORT" "$MCP_TARGET" create_memory_project       '{"project_name": "asynthlogr", "project_path": "'"$ASYNTHLOGR_PROJECT_PATH"'"}' 2>&1)"; then
+    echo "ERROR: couldn't create the 'asynthlogr' basic-memory project over MCP"
+    echo "  ($MCP_TRANSPORT: $MCP_TARGET):"
+    echo "  $mcp_result" | cut -c1-400
+    exit 1
+  fi
+  if ! BM_PROJECTS="$(mcp_call "$MCP_TRANSPORT" "$MCP_TARGET" list_memory_projects '{}' 2>&1)"      || ! mcp_lists_project "$BM_PROJECTS" asynthlogr; then
+    echo "ERROR: basic-memory accepted the 'asynthlogr' project but doesn't list it."
+    exit 1
+  fi
   echo "  registered 'asynthlogr' -> $ASYNTHLOGR_PROJECT_PATH"
 fi
 # failed-writes.log is a plain ops log, not a note. basic-memory honors a
@@ -363,6 +361,7 @@ cp "$SCRIPT_DIR/hooks/check-pending-subagents.sh" "$TARGET/.claude/hooks/check-p
 chmod +x "$TARGET/.claude/hooks/check-pending-subagents.sh"
 # The daily report generator, run manually via the /asynthlogr-report skill.
 cp "$SCRIPT_DIR/bin/asynthlogr-report.sh" "$TARGET/.claude/asynthlogr/bin/asynthlogr-report.sh"
+cp "$SCRIPT_DIR/bin/mcp-client.sh" "$TARGET/.claude/asynthlogr/bin/mcp-client.sh"
 chmod +x "$TARGET/.claude/asynthlogr/bin/asynthlogr-report.sh"
 for skill in i-have-adhd obsidian-notation-expert obsidian-node-link-expert asynthlogr-report; do
   mkdir -p "$TARGET/.claude/skills/$skill"
@@ -432,6 +431,7 @@ if [ "$BM_MODE" = "docker" ]; then
 {
   "basic_memory_dir": "$ASYNTHLOGR_DIR",
   "basic_memory_project": "asynthlogr",
+  "basic_memory_project_path": "$ASYNTHLOGR_PROJECT_PATH",
   "basic_memory_mode": "docker",
   "basic_memory_docker_container": "$BM_DOCKER_CONTAINER",
   "basic_memory_mcp_endpoint": "$BM_DOCKER_URL",
@@ -443,6 +443,7 @@ else
 {
   "basic_memory_dir": "$ASYNTHLOGR_DIR",
   "basic_memory_project": "asynthlogr",
+  "basic_memory_project_path": "$ASYNTHLOGR_PROJECT_PATH",
   "basic_memory_mode": "cli"
 }
 EOF

@@ -41,20 +41,6 @@ case "${1:-}" in
       echo "$DOCKER_STUB_HOST_DATA_DIR"
     fi
     ;;
-  exec)
-    # docker exec [-i] <container> basic-memory <args...>
-    # Forward straight to the canonical basic-memory stub sitting next
-    # to this one on PATH (same trick tests/stubs/bin/uv uses).
-    shift 1                      # drop "exec"
-    [ "${1:-}" != "-i" ] || shift
-    if [ -n "${BM_STUB_STATE_DIR:-}" ]; then
-      mkdir -p "$BM_STUB_STATE_DIR"
-      echo "$1" >> "$BM_STUB_STATE_DIR/docker-exec-containers.txt"
-    fi
-    shift 2                      # drop "<container>" and the literal "basic-memory"
-    SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    exec "$SELF_DIR/basic-memory" "$@"
-    ;;
   *)
     echo "stub docker: unhandled command: ${1:-}" >&2
     exit 1

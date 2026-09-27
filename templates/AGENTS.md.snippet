@@ -31,9 +31,14 @@ Determine and fix for the rest of this session:
   delegate this naming to decision-logger, and never regenerate it
   mid-session — one session, one thread name, decided once.
 - Read `.claude/asynthlogr.config.json` for `basic_memory_dir` (used
-  as `vault_root` below).
+  as `vault_root` below) and `basic_memory_project_path`.
 
 Then, synchronously, in this order:
+0. Make sure the `asynthlogr` project exists: call
+   `list_memory_projects`, and if `asynthlogr` isn't listed, call
+   `create_memory_project(project_name: "asynthlogr", project_path: "<basic_memory_project_path>")`.
+   Always through these MCP tools, never the basic-memory CLI: a
+   running server discards projects that were added behind its back.
 1. Create the thread note decision-logger will append entries to (it
    only ever appends, so two background loggers can never race to
    create it):

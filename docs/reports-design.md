@@ -176,13 +176,16 @@ asynthlogr-report.sh [--date YYYY-MM-DD | --today] [--catch-up] [--since YYYY-MM
    questions and failures (the table under "Inputs").
 3. Render in a fixed order (repos, then threads, then entries, each
    sorted), so a rerun on unchanged data produces the same body.
-4. Write through basic-memory, `project asynthlogr`, folder `reports`,
-   title `<D>`:
-   - CLI mode: `basic-memory tool write-note … --overwrite`
-   - Docker mode: the same command through `docker exec -i <container>`
-   - basic-memory 0.18.x has no `--overwrite` and replaces by default:
-     if the flag is rejected, retry without it (the same fallback
-     approach `install.sh` uses for `project list --json`).
+4. Write with basic-memory's `write_note` MCP tool — `project:
+   "asynthlogr"`, `directory: "reports"`, `title: "<D>"`,
+   `overwrite: true` — through `bin/mcp-client.sh`, never the
+   basic-memory CLI:
+   - CLI mode: over stdio to `basic-memory mcp`
+   - Docker mode: over the container's endpoint from the config
+     (`basic_memory_mcp_endpoint`, `basic_memory_mcp_transport`)
+   - basic-memory 0.18.x has no `overwrite` argument and replaces by
+     default: it rejects the call ("Unexpected keyword argument
+     'overwrite'"), and the script retries without it.
 5. If the write fails, append a `report` line to `failed-writes.log`
    and exit 0. Never retry, never block (principle 5).
 
@@ -219,8 +222,9 @@ progress, and flags it `complete: false`.
   given day, failure-only threads, a day with no activity, `--today`,
   identical reruns, `--catch-up`/`--since`, the 0.18.x no-`--overwrite`
   fallback, Docker mode, and a failed write.
-- Checked live against basic-memory 0.18.4 in Docker: the report is
-  written and replaced through `tool write-note`, and catch-up skips
+- Checked live against basic-memory 0.18.4 in Docker: `write_note`
+  over MCP rejects `overwrite` as described and replaces the note
+  without it; the report is written and replaced, and catch-up skips
   days that already have a report. basic-memory rewrites the report's
   frontmatter in its own style (quoted title, block lists, a space
   instead of `T` in `generated_at`); the body is stored as rendered.

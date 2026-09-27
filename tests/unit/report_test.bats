@@ -12,7 +12,7 @@ setup() {
   TEST_TMP="$(mktemp -d)"
   BIN_DIR="$TEST_TMP/bin"
   mkdir -p "$BIN_DIR"
-  cp "$STUBS_SRC/basic-memory" "$STUBS_SRC/docker" "$BIN_DIR/"
+  cp "$STUBS_SRC/basic-memory" "$STUBS_SRC/curl" "$STUBS_SRC/mcp-stub-respond" "$BIN_DIR/"
   chmod +x "$BIN_DIR"/*
   export PATH="$BIN_DIR:$PATH"
   export BM_STUB_STATE_DIR="$TEST_TMP/bm-state"
@@ -30,7 +30,7 @@ teardown() {
 
 write_config() {
   if [ "$1" = "docker" ]; then
-    printf '{"basic_memory_dir": "%s", "basic_memory_project": "asynthlogr", "basic_memory_mode": "docker", "basic_memory_docker_container": "abc123"}\n' "$VAULT" > "$CONFIG"
+    printf '{"basic_memory_dir": "%s", "basic_memory_project": "asynthlogr", "basic_memory_mode": "docker", "basic_memory_docker_container": "abc123", "basic_memory_mcp_endpoint": "http://localhost:8011/mcp", "basic_memory_mcp_transport": "sse"}\n' "$VAULT" > "$CONFIG"
   else
     printf '{"basic_memory_dir": "%s", "basic_memory_project": "asynthlogr", "basic_memory_mode": "cli"}\n' "$VAULT" > "$CONFIG"
   fi
@@ -237,11 +237,17 @@ report_file() { echo "$VAULT/reports/$1.md"; }
   [ -f "$(report_file 2026-09-24)" ]
 }
 
-@test "in Docker mode, writes through docker exec into the configured container" {
+@test "writes the report with the write_note MCP tool, never the basic-memory CLI" {
+  run "$REPORT" --config "$CONFIG" --date 2026-09-24
+  [ "$status" -eq 0 ]
+  grep -qx 'write_note' "$BM_STUB_STATE_DIR/mcp-calls.txt"
+}
+
+@test "in Docker mode, writes over the container's MCP endpoint from the config" {
   write_config docker
   run "$REPORT" --config "$CONFIG" --date 2026-09-24
   [ "$status" -eq 0 ]
-  grep -qx 'abc123' "$BM_STUB_STATE_DIR/docker-exec-containers.txt"
+  grep -qx 'http://localhost:8011/mcp' "$BM_STUB_STATE_DIR/curl-urls.txt"
   [ -f "$(report_file 2026-09-24)" ]
 }
 

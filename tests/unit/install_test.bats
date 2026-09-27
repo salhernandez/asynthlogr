@@ -21,6 +21,7 @@ setup() {
   cp "$STUBS_SRC/claude" "$BIN_DIR/claude"
   cp "$STUBS_SRC/uv" "$BIN_DIR/uv"
   cp "$STUBS_SRC/basic-memory" "$BIN_DIR/basic-memory"
+  cp "$STUBS_SRC/mcp-stub-respond" "$BIN_DIR/mcp-stub-respond"
   chmod +x "$BIN_DIR"/*
 
   export ASYNTHLOGR_TESTS_ROOT="$REPO_ROOT/tests"
@@ -173,26 +174,15 @@ copy_fixture_target() {
   grep -q "^asynthlogr $HOME/basic-memory/asynthlogr$" "$BM_STUB_STATE_DIR/projects.txt"
 }
 
-@test "older basic-memory without 'project list --json': detects an existing project from its table" {
+@test "registers the project over MCP (list, then create), never through the basic-memory CLI" {
   copy_fixture_target empty
-  export BM_STUB_OLD_VERSION=1
-  mkdir -p "$BM_STUB_STATE_DIR"
-  echo "asynthlogr /asynthlogr" > "$BM_STUB_STATE_DIR/projects.txt"
 
   run "$INSTALL_SH" "$TARGET"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"'asynthlogr' project already registered"* ]]
-}
-
-@test "older basic-memory without 'project list --json': a similarly named project doesn't count" {
-  copy_fixture_target empty
-  export BM_STUB_OLD_VERSION=1
-  mkdir -p "$BM_STUB_STATE_DIR"
-  echo "asynthlogr-old /asynthlogr-old" > "$BM_STUB_STATE_DIR/projects.txt"
-
-  run "$INSTALL_SH" "$TARGET"
-  [ "$status" -eq 0 ]
-  [[ "$output" == *"registered 'asynthlogr'"* ]]
+  # the stub rejects every CLI subcommand, so success already rules the
+  # CLI out; this pins down the MCP calls that did the work
+  [ "$(cat "$BM_STUB_STATE_DIR/mcp-calls.txt")" = "$(printf 'list_memory_projects\ncreate_memory_project\nlist_memory_projects')" ]
+  [ "$(jq -r '.basic_memory_project_path' "$TARGET/.claude/asynthlogr.config.json")" = "$HOME/basic-memory/asynthlogr" ]
 }
 
 @test "fails cleanly when basic-memory's project list is broken (simulated init failure)" {
@@ -304,8 +294,10 @@ copy_fixture_target() {
 # which is itself the "Docker not installed" case and already covered).
 
 enable_docker_stub() {
-  cp "$STUBS_SRC/docker" "$BIN_DIR/docker"
-  chmod +x "$BIN_DIR/docker"
+  # Docker mode talks to the container's MCP endpoint over HTTP, so the
+  # curl stub (which plays that endpoint) comes along.
+  cp "$STUBS_SRC/docker" "$STUBS_SRC/curl" "$BIN_DIR/"
+  chmod +x "$BIN_DIR/docker" "$BIN_DIR/curl"
 }
 
 @test "falls back to the CLI when every docker call fails" {
@@ -431,6 +423,43 @@ enable_docker_stub() {
   # the asynthlogr project was registered via `docker exec ... basic-memory project add`,
   # using the CONTAINER-side path, not the host path
   grep -q "asynthlogr /app/data/asynthlogr" "$BM_STUB_STATE_DIR/projects.txt"
+  # ...over the container's MCP endpoint, not docker exec
+  grep -qx "http://localhost:32768/mcp" "$BM_STUB_STATE_DIR/curl-urls.txt"
+  [ "$(jq -r '.basic_memory_project_path' "$TARGET/.claude/asynthlogr.config.json")" = "/app/data/asynthlogr" ]
+}
+
+@test "Docker mode: a server that already has the project isn't asked to create it again" {
+  copy_fixture_target empty
+  enable_docker_stub
+  DOCKER_DATA_DIR="$TEST_TMP/docker-knowledge"
+  mkdir -p "$DOCKER_DATA_DIR" "$BM_STUB_STATE_DIR"
+  echo "asynthlogr /app/data/asynthlogr" > "$BM_STUB_STATE_DIR/projects.txt"
+  export DOCKER_STUB_DAEMON_RUNNING=1
+  export DOCKER_STUB_CONTAINER_ID=abc123
+  export DOCKER_STUB_HOST_PORT=32768
+  export DOCKER_STUB_HOST_DATA_DIR="$DOCKER_DATA_DIR"
+
+  run "$INSTALL_SH" "$TARGET"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"'asynthlogr' project already registered"* ]]
+  ! grep -qx create_memory_project "$BM_STUB_STATE_DIR/mcp-calls.txt"
+}
+
+@test "Docker mode: fails clearly when the container's MCP endpoint doesn't answer" {
+  copy_fixture_target empty
+  enable_docker_stub
+  DOCKER_DATA_DIR="$TEST_TMP/docker-knowledge"
+  mkdir -p "$DOCKER_DATA_DIR"
+  export DOCKER_STUB_DAEMON_RUNNING=1
+  export DOCKER_STUB_CONTAINER_ID=abc123
+  export DOCKER_STUB_HOST_PORT=32768
+  export DOCKER_STUB_HOST_DATA_DIR="$DOCKER_DATA_DIR"
+  export CURL_STUB_FAIL=1
+
+  run "$INSTALL_SH" "$TARGET"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"didn't answer list_memory_projects"* ]]
+  [[ "$output" == *"docker logs abc123"* ]]
 }
 
 @test "maps a Docker Desktop VM mount path (/run/desktop/mnt/host/...) back to the host path" {

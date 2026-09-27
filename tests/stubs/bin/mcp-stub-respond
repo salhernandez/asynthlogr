@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+# Test-only stand-in for basic-memory's MCP server logic, shared by the
+# `curl` stub (SSE / streamable-HTTP transports) and `basic-memory mcp`
+# (stdio). Reads one JSON-RPC message on stdin and prints the response
+# line (nothing for notifications).
+#
+# State (BM_STUB_STATE_DIR):
+#   projects.txt          "<name> <path>" per project (list/create)
+#   write-note-calls.txt  one line per write_note call
+#   mcp-calls.txt         one line per tool call: "<tool>"
+# Notes are written to BM_STUB_WRITE_ROOT (default: state dir/notes).
+#
+#   BM_STUB_OLD_VERSION=1  write_note rejects an `overwrite` argument (0.18.x)
+#   BM_STUB_FAIL_WRITE=1   write_note fails
+set -euo pipefail
+
+STATE_DIR="${BM_STUB_STATE_DIR:?BM_STUB_STATE_DIR must be set}"
+mkdir -p "$STATE_DIR"
+touch "$STATE_DIR/projects.txt"
+
+msg="$(cat)"
+id="$(jq -r '.id // empty' <<< "$msg")"
+[ -n "$id" ] || exit 0    # notification: no response
+method="$(jq -r '.method' <<< "$msg")"
+
+reply() {  # $1 text, $2 isError (true/false)
+  jq -cn --argjson id "$id" --arg text "$1" --argjson err "$2" \
+    '{jsonrpc: "2.0", id: $id, result: {content: [{type: "text", text: $text}], isError: $err}}'
+}
+
+case "$method" in
+  initialize)
+    jq -cn --argjson id "$id" \
+      '{jsonrpc: "2.0", id: $id, result: {protocolVersion: "2024-11-05", capabilities: {tools: {}}, serverInfo: {name: "basic-memory-stub", version: "0"}}}'
+    ;;
+  tools/call)
+    tool="$(jq -r '.params.name' <<< "$msg")"
+    args="$(jq -c '.params.arguments' <<< "$msg")"
+    echo "$tool" >> "$STATE_DIR/mcp-calls.txt"
+    case "$tool" in
+      list_memory_projects)
+        text="Available projects:"
+        while read -r name _; do
+          [ -n "$name" ] && text="$text"$'\n'"• $name"
+        done < "$STATE_DIR/projects.txt"
+        reply "$text"$'\n' false
+        ;;
+      create_memory_project)
+        name="$(jq -r '.project_name' <<< "$args")"
+        path="$(jq -r '.project_path' <<< "$args")"
+        if grep -q "^$name " "$STATE_DIR/projects.txt"; then
+          reply "Error: Project '$name' already exists" true
+        else
+          echo "$name $path" >> "$STATE_DIR/projects.txt"
+          reply "✓ Project '$name' added successfully" false
+        fi
+        ;;
+      write_note)
+        has_overwrite="$(jq -r 'has("overwrite")' <<< "$args")"
+        if [ "${BM_STUB_OLD_VERSION:-0}" = "1" ] && [ "$has_overwrite" = "true" ]; then
+          reply "Error calling tool 'write_note': Unexpected keyword argument 'overwrite'" true
+          exit 0
+        fi
+        if [ "${BM_STUB_FAIL_WRITE:-0}" = "1" ]; then
+          reply "stub basic-memory: simulated write failure" true
+          exit 0
+        fi
+        title="$(jq -r '.title' <<< "$args")"
+        dir="$(jq -r '.directory' <<< "$args")"
+        project="$(jq -r '.project // ""' <<< "$args")"
+        overwrite="$(jq -r '.overwrite // false' <<< "$args")"
+        root="${BM_STUB_WRITE_ROOT:-$STATE_DIR/notes}"
+        mkdir -p "$root/$dir"
+        jq -j '.content' <<< "$args" > "$root/$dir/$title.md"
+        echo "title=$title folder=$dir project=$project overwrite=$overwrite" >> "$STATE_DIR/write-note-calls.txt"
+        reply "# Created note
+file_path: $dir/$title.md" false
+        ;;
+      *)
+        reply "stub: unknown tool $tool" true
+        ;;
+    esac
+    ;;
+  *)
+    jq -cn --argjson id "$id" --arg m "$method" '{jsonrpc: "2.0", id: $id, error: {code: -32601, message: ("unknown method " + $m)}}'
+    ;;
+esac

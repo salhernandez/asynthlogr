@@ -4,11 +4,15 @@
 # /asynthlogr-report skill — nothing runs it automatically.
 #
 # Reads the vault as plain files (like the pending-run hook) and writes
-# one note, reports/<YYYY-MM-DD>.md, through basic-memory: a cross-repo
+# one note, reports/<YYYY-MM-DD>.md, through basic-memory's MCP server
+# (write_note — never the basic-memory CLI): a cross-repo
 # summary table, then one section per repo and per active thread.
 # See docs/reports-design.md.
 
 set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=mcp-client.sh
+. "$SCRIPT_DIR/mcp-client.sh"
 # Deterministic glob/sort order, and byte-wise matching of the UTF-8
 # separators ("—", "×") regardless of the caller's locale.
 export LC_ALL=C
@@ -53,21 +57,20 @@ command -v jq >/dev/null 2>&1 || { echo "ERROR: jq is required." >&2; exit 1; }
 
 VAULT="$(jq -r '.basic_memory_dir // empty' "$CONFIG")"
 BM_MODE="$(jq -r '.basic_memory_mode // "cli"' "$CONFIG")"
-BM_CONTAINER="$(jq -r '.basic_memory_docker_container // empty' "$CONFIG")"
+if [ "$BM_MODE" = "docker" ]; then
+  MCP_TRANSPORT="$(jq -r '.basic_memory_mcp_transport // "sse"' "$CONFIG")"
+  MCP_TARGET="$(jq -r '.basic_memory_mcp_endpoint // empty' "$CONFIG")"
+  [ -n "$MCP_TARGET" ] || { echo "ERROR: basic_memory_mcp_endpoint missing from $CONFIG — re-run install.sh." >&2; exit 1; }
+else
+  MCP_TRANSPORT="stdio"
+  MCP_TARGET="basic-memory mcp"
+fi
 [ -n "$VAULT" ] && [ -d "$VAULT" ] || { echo "ERROR: vault directory not found: ${VAULT:-<unset>}" >&2; exit 1; }
 FAILED_LOG="$VAULT/failed-writes.log"
 
 # Local ISO 8601 with a colon in the offset, e.g. 2026-09-26T11:21:00-07:00.
 now_iso() { date +%Y-%m-%dT%H:%M:%S%z | sed 's/\([0-9][0-9]\)$/:\1/'; }
 TODAY="$(date +%Y-%m-%d)"
-
-bm() {
-  if [ "$BM_MODE" = "docker" ]; then
-    docker exec -i "$BM_CONTAINER" basic-memory "$@"
-  else
-    basic-memory "$@"
-  fi
-}
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
@@ -303,20 +306,27 @@ render_day() {
   } > "$out"
 }
 
-# Writes $2 as reports/<$1>.md through basic-memory, replacing any
-# existing report. basic-memory 0.18.x has no --overwrite (it replaces
-# by default), so retry without the flag if it's rejected.
+# Writes $2 as reports/<$1>.md with basic-memory's write_note MCP tool,
+# replacing any existing report. Newer basic-memory needs overwrite: true
+# to replace a note; 0.18.x has no overwrite argument (and replaces by
+# default), so retry without it if it's rejected.
 write_report() {
-  local d="$1" body="$2" err
-  if err="$(bm tool write-note --title "$d" --folder reports --project asynthlogr --overwrite < "$body" 2>&1 >/dev/null)"; then
+  local d="$1" body="$2" content err
+  content="$(jq -Rs . < "$body")"
+  local args='{"title": "'"$d"'", "directory": "reports", "project": "asynthlogr", "content": '"$content"
+  if err="$(mcp_call "$MCP_TRANSPORT" "$MCP_TARGET" write_note "$args"', "overwrite": true}' 2>&1)"; then
     return 0
   fi
-  if echo "$err" | grep -q -- '--overwrite'; then
-    if err="$(bm tool write-note --title "$d" --folder reports --project asynthlogr < "$body" 2>&1 >/dev/null)"; then
+  if echo "$err" | grep -qi 'overwrite'; then
+    if err="$(mcp_call "$MCP_TRANSPORT" "$MCP_TARGET" write_note "$args}" 2>&1)"; then
       return 0
     fi
   fi
-  printf '%s | reports/%s | report | %s\n' "$(now_iso)" "$d" "$(echo "$err" | tr '\n' ' ' | cut -c1-200)" >> "$FAILED_LOG"
+  # Log the tool's own message when there is one, not the raw JSON-RPC.
+  local msg
+  msg="$(echo "$err" | grep '^{' | tail -n1 | jq -r '.result.content[0].text // .error.message // empty' 2>/dev/null || true)"
+  err="$(echo "${msg:-$err}" | tr '\n' ' ' | cut -c1-300)"
+  printf '%s | reports/%s | report | %s\n' "$(now_iso)" "$d" "$err" >> "$FAILED_LOG"
   echo "ERROR: writing reports/$d.md failed (logged to failed-writes.log): $err" >&2
   return 1
 }

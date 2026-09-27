@@ -1,102 +1,30 @@
 #!/usr/bin/env bash
 # Deterministic stub for the `basic-memory` CLI, used only in tests.
-# State (registered projects) lives in a file controlled by
-# BM_STUB_STATE_DIR, which the test must set to a per-test temp dir.
-# Set BM_STUB_FAIL_LIST=1 to simulate basic-memory being broken (used
-# to test install.sh's "is it initialized" failure path).
+# asynthlogr only ever runs `basic-memory mcp` (a stdio MCP server) —
+# every other subcommand fails here on purpose, so any regression to
+# driving basic-memory through its CLI breaks the tests.
+#
+# The server logic lives in mcp-stub-respond, next to this file; state is
+# in BM_STUB_STATE_DIR. BM_STUB_FAIL_LIST=1 simulates a broken install
+# (the server exits without answering).
 set -euo pipefail
 
-STATE_DIR="${BM_STUB_STATE_DIR:?BM_STUB_STATE_DIR must be set}"
-mkdir -p "$STATE_DIR"
-PROJECTS_FILE="$STATE_DIR/projects.txt"
-touch "$PROJECTS_FILE"
-
-if [ "${BM_STUB_FAIL_LIST:-0}" = "1" ]; then
-  echo "stub basic-memory: simulated failure" >&2
-  exit 1
-fi
+: "${BM_STUB_STATE_DIR:?BM_STUB_STATE_DIR must be set}"
+RESPOND="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/mcp-stub-respond"
 
 case "${1:-}" in
-  project)
-    case "${2:-}" in
-      list)
-        # State is one "<name> <path>" line per project. With --json,
-        # mirror real basic-memory's shape: {"projects": [{"name", "path"}]}.
-        # BM_STUB_OLD_VERSION=1 mimics basic-memory 0.18.x: no --json flag,
-        # and a rich table as the only output (captured from 0.18.4).
-        if [ "${BM_STUB_OLD_VERSION:-0}" = "1" ]; then
-          if [ "${3:-}" = "--json" ]; then
-            echo "No such option: --json" >&2
-            exit 2
-          fi
-          echo "        Basic Memory Projects         "
-          echo "┏━━━━━━━━━━━━┳━━━━━━━━━━━━━┳━━━━━━━━━┓"
-          echo "┃ Name       ┃ Path        ┃ Default ┃"
-          echo "┡━━━━━━━━━━━━╇━━━━━━━━━━━━━╇━━━━━━━━━┩"
-          while read -r name path; do
-            [ -n "$name" ] || continue
-            printf '│ %-10s │ %-11s │         │\n' "$name" "$path"
-          done < "$PROJECTS_FILE"
-          echo "└────────────┴─────────────┴─────────┘"
-        elif [ "${3:-}" = "--json" ]; then
-          echo '{"projects": ['
-          sep=""
-          while read -r name path; do
-            [ -n "$name" ] || continue
-            printf '%s  {"name": "%s", "path": "%s"}' "$sep" "$name" "$path"
-            sep=$',\n'
-          done < "$PROJECTS_FILE"
-          printf '\n]}\n'
-        else
-          cat "$PROJECTS_FILE"
-        fi
-        ;;
-      add)
-        name="$3"
-        path="$4"
-        echo "$name $path" >> "$PROJECTS_FILE"
-        echo "Added project: $name -> $path"
-        ;;
-      *)
-        echo "stub basic-memory: unhandled project subcommand: ${2:-}" >&2
-        exit 1
-        ;;
-    esac
-    ;;
-  tool)
-    # Only `tool write-note --title T --folder F --project P [--overwrite]`,
-    # content on stdin. Writes <BM_STUB_WRITE_ROOT or state>/F/T.md and
-    # records the arguments. BM_STUB_OLD_VERSION=1 rejects --overwrite
-    # like 0.18.x; BM_STUB_FAIL_WRITE=1 simulates a failed write.
-    [ "${2:-}" = "write-note" ] || { echo "stub basic-memory: unhandled tool: ${2:-}" >&2; exit 1; }
-    shift 2
-    title="" folder="" project="" overwrite=false
-    while [ $# -gt 0 ]; do
-      case "$1" in
-        --title) title="$2"; shift 2 ;;
-        --folder) folder="$2"; shift 2 ;;
-        --project) project="$2"; shift 2 ;;
-        --overwrite)
-          if [ "${BM_STUB_OLD_VERSION:-0}" = "1" ]; then
-            echo "No such option: --overwrite" >&2
-            exit 2
-          fi
-          overwrite=true; shift ;;
-        *) echo "stub basic-memory: unhandled write-note arg: $1" >&2; exit 1 ;;
-      esac
-    done
-    if [ "${BM_STUB_FAIL_WRITE:-0}" = "1" ]; then
-      echo "stub basic-memory: simulated write failure" >&2
+  mcp)
+    if [ "${BM_STUB_FAIL_LIST:-0}" = "1" ]; then
+      echo "stub basic-memory: simulated failure" >&2
       exit 1
     fi
-    root="${BM_STUB_WRITE_ROOT:-$STATE_DIR/notes}"
-    mkdir -p "$root/$folder"
-    cat > "$root/$folder/$title.md"
-    echo "title=$title folder=$folder project=$project overwrite=$overwrite" >> "$STATE_DIR/write-note-calls.txt"
-    echo "Created note: $folder/$title.md"
+    while IFS= read -r line; do
+      [ -n "$line" ] || continue
+      printf '%s' "$line" | "$RESPOND"
+    done
     ;;
   *)
-    echo "stub basic-memory: unhandled command: ${1:-}" >&2
+    echo "stub basic-memory: '$*' — asynthlogr must use the MCP server, not the CLI" >&2
     exit 1
     ;;
 esac
