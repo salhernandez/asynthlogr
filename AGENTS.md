@@ -98,18 +98,25 @@ which also drops the `subagent-run-pending` tag.
 
 ### At step 3 (solution proposed) and step 5 (plan finalized)
 Dispatch `decision-logger` in the background with `entry_type: decision`.
+At step 5, save the plan first (see "Saving the plan" below).
 
-### When the user approves a plan (plan mode)
-As soon as the user approves a plan you presented with `ExitPlanMode`,
-save it to the vault — before starting the work it describes. Take its
-text verbatim from the plan file (`ExitPlanMode`'s result names the
-path) and name the note after that file (`<plan_name>`, its basename
-without `.md`):
-`write_note(title: "<plan_name>", directory: "<repo>/<thread>/plans", content: "---\nplan_file: <plan file path>\napproved_at: <ISO8601>\n---\n\n**Thread:** [[<repo>/<thread>/<thread>|<thread>]]\n\n<plan text, verbatim>", tags: "asynthlogr-plan", project: "asynthlogr")`.
-A revised plan approved later in the session reuses its file, so it
-overwrites the same note. Treat the approval as step 5's plan-finalized
-decision (dispatch `decision-logger` as above if you haven't for this
-plan) and pass the note's permalink as `plan_note`.
+### Saving the plan (step 5)
+The plan is its own note, never just text inside the thread note.
+Whenever a plan is finalized — the user approves one you presented
+with `ExitPlanMode`, a planning-agent returns one, or you write one
+yourself — save it before dispatching `decision-logger` and before
+starting the work it describes:
+`write_note(title: "<plan_name>", directory: "<repo>/<thread>/plans", content: "---\nsource: <plan-mode | planning-agent | orchestrator>\nplan_file: <plan file path, plan mode only>\nstatus: <proposed | approved>\nupdated_at: <ISO8601>\n---\n\n**Thread:** [[<repo>/<thread>/<thread>|<thread>]]\n\n<the full plan, verbatim>", tags: "asynthlogr-plan", project: "asynthlogr")`.
+- `<plan_name>`: in plan mode, the plan file's basename without `.md`
+  (`ExitPlanMode`'s result names the file); otherwise
+  `<run_id>_<topic_slug>`, generated like a subagent run's.
+- A revised version of the same plan overwrites the same note (same
+  `<plan_name>`); a different plan gets a new one. When the user
+  approves a plan saved as `proposed`, set `status: approved` and
+  `updated_at` with `read_note` + `find_replace`.
+- Pass the note's permalink as `plan_note` in the plan-finalized
+  `decision` dispatch, and keep that dispatch's `decision` to a
+  one-paragraph summary: the plan's steps live only in the plan note.
 
 ### On explicit request ("log this", "log this as info")
 Dispatch `decision-logger` in the background with `entry_type: info`.

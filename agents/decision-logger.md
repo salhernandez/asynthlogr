@@ -82,6 +82,8 @@ Do the following, in order:
 
    For a decision carrying `plan_note`, render a "### Plan" section
    with one wikilink to it: `[[<plan_note>|<last segment of plan_note>]]`.
+   The plan itself lives in that note: render `decision` as given (a
+   summary) and never copy the plan's steps into the thread note.
 
 5. Make the write from step 2.
 

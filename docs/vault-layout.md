@@ -26,7 +26,7 @@ stored as `basic_memory_dir` in `.claude/asynthlogr.config.json`.
       <thread-name>.md                            # distilled decision + info entries, chronological, mixed types
       agent-use-tracking.md                       # thread-level: current step + step-transition log
       plans/
-        <plan_name>.md                              # a plan-mode plan the user approved, verbatim (named after its plan file)
+        <plan_name>.md                              # each finalized plan, in full (plan mode, planning-agent, or orchestrator); the thread note only links to it
       subagents/
         <run_id>_<subagent_name>-<topic_slug>/
           agent-use-tracking.md                    # this run's live status, written by the subagent itself

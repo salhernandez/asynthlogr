@@ -56,7 +56,7 @@ start, so the logger never has to create it.
 
 ### Plan
 - [[repo-1/auth-token-refresh/plans/spicy-dazzling-reddy|spicy-dazzling-reddy]]
-(only when the decision approved a plan-mode plan; the plan's text lives in that note)
+(plan-finalized decisions only; the plan's full text lives in that note, never in the thread note)
 
 ### Files
 - [auth/token.ts:42](cursor://file/...) · [VS Code](vscode://file/...) · [GitHub](https://github.com/.../blob/<sha>/auth/token.ts#L42)
