@@ -37,6 +37,7 @@ decision: >
 rationale: >
   <why, if not fully covered above>
 decision_maker: <"user" | "agent-suggested, user-approved">
+plan_note: <permalink of the saved plan-mode plan, if this decision approved one>
 
 # --- entry_type: info only ---
 content: >

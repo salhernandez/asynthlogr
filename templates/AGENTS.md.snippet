@@ -98,6 +98,18 @@ which also drops the `subagent-run-pending` tag.
 ### At step 3 (solution proposed) and step 5 (plan finalized)
 Dispatch `decision-logger` in the background with `entry_type: decision`.
 
+### When the user approves a plan (plan mode)
+As soon as the user approves a plan you presented with `ExitPlanMode`,
+save it to the vault — before starting the work it describes. Take its
+text verbatim from the plan file (`ExitPlanMode`'s result names the
+path) and name the note after that file (`<plan_name>`, its basename
+without `.md`):
+`write_note(title: "<plan_name>", directory: "<repo>/<thread>/plans", content: "---\nplan_file: <plan file path>\napproved_at: <ISO8601>\n---\n\n**Thread:** [[<repo>/<thread>/<thread>|<thread>]]\n\n<plan text, verbatim>", tags: "asynthlogr-plan", project: "asynthlogr")`.
+A revised plan approved later in the session reuses its file, so it
+overwrites the same note. Treat the approval as step 5's plan-finalized
+decision (dispatch `decision-logger` as above if you haven't for this
+plan) and pass the note's permalink as `plan_note`.
+
 ### On explicit request ("log this", "log this as info")
 Dispatch `decision-logger` in the background with `entry_type: info`.
 

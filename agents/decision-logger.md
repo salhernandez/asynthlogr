@@ -80,6 +80,9 @@ Do the following, in order:
    Do not verify those notes exist first — they may still be in
    flight in the background; linking is by convention, not lookup.
 
+   For a decision carrying `plan_note`, render a "### Plan" section
+   with one wikilink to it: `[[<plan_note>|<last segment of plan_note>]]`.
+
 5. Make the write from step 2.
 
 6. If the write fails, do not retry and do not raise an error back to
