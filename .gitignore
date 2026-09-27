@@ -1,0 +1,11 @@
+# asynthlogr installed into its own repo (./install.sh . [--force]).
+# The copies under .claude/ are generated from agents/, hooks/, skills/,
+# bin/ and docs/ — edit those and re-run the installer instead — and the
+# config and active-thread files hold machine-specific paths.
+.claude/agents/
+.claude/hooks/
+.claude/skills/
+.claude/asynthlogr/
+.claude/settings.json
+.claude/asynthlogr.config.json
+.claude/active-thread.json
