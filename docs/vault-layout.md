@@ -28,7 +28,7 @@ stored as `basic_memory_dir` in `.claude/asynthlogr.config.json`.
       subagents/
         <run_id>_<subagent_name>-<topic_slug>/
           agent-use-tracking.md                    # this run's live status, written by the subagent itself
-          output.md                                 # this run's distilled record, written by decision-logger
+          output.md                                 # this run's record: a placeholder from the orchestrator at dispatch, replaced by decision-logger
 
   reports/
     <YYYY-MM-DD>.md                                 # daily report, written by /asynthlogr-report (docs/reports-design.md)

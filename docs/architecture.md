@@ -44,8 +44,9 @@ whichever decision entry follows).
 5. **Silent failure is not acceptable, but blocking is also not
    acceptable.** Failures land in a dead-letter log
    (`failed-writes.log`), never in a retry loop, never in a blocking
-   prompt. Runs still pending when the session ends are recorded there
-   too (see "Pending-run hooks" below).
+   prompt. A run whose output was never logged keeps a placeholder
+   note pointing at the subagent (see "Placeholder output notes"
+   below).
 6. **basic-memory is a hard, required dependency — not one option
    among several.** Every piece of information this system logs —
    decision/info entries, subagent-run output, both levels of
@@ -64,8 +65,8 @@ whichever decision entry follows).
    server if needed — it does not just check and fail. The only files
    in this whole system that are plain filesystem files, not
    basic-memory-managed notes, are repo-local operational files that
-   live outside the vault: `.claude/active-thread.json`,
-   `.claude/asynthlogr.config.json`, and `failed-writes.log` (an ops
+   live outside the vault: `.claude/asynthlogr.config.json` and
+   `failed-writes.log` (an ops
    dead-letter log, not a knowledge artifact — `install.sh` lists it
    in the project's `.gitignore`, which basic-memory honors, so it
    stays out of basic-memory's index).
@@ -163,54 +164,42 @@ already-decided name. Same principle applies to `run_id`/`topic_slug`
 — always orchestrator-generated, synchronously, immediately before
 each dispatch, never invented by the subagent or by `decision-logger`.
 
-## Pending-run hooks — warn, then record
+## Placeholder output notes — no waiting on a run
 
-**Problem:** a background subagent-run write depends on its completion
-notification reaching the orchestrator in a later turn. If the session
-ends first, that write never happens — silently, since it never
-touches `failed-writes.log` either (that only catches write failures,
-not "never attempted").
+**Problem:** a run's `output.md` is written by `decision-logger` only
+after the subagent's result reaches the orchestrator, in some later
+turn. If the session ends first, or the logger's write fails, the run
+has no output note at all.
 
-**Why not block the exit:** Claude Code's `Stop` event fires every
-time Claude finishes a response, not only when the session is about
-to end, and a blocking `Stop` hook sends its message to *Claude* and
-forces it to keep going — the human never sees it. A blocking hook
-would therefore interrupt the session mid-work whenever background
-runs were in flight, breaking principle 1. `SessionEnd`, which does
-fire on exit, can't block at all.
+**Why not wait for it:** Claude Code's `Stop` event fires every time
+Claude finishes a response, and a blocking `Stop` hook forces Claude to
+keep going without the human seeing why; `SessionEnd` can't block at
+all. An earlier design used a non-blocking `Stop` warning plus a
+`SessionEnd` "abandoned" line in `failed-writes.log`, but it depended
+on each subagent setting `status` in its tracking note, which
+basic-memory's `metadata`-less tools never allowed, so it warned about
+every run, finished or not. It is gone, and `install.sh` removes it
+from older installs.
 
-**Mitigation:** one script, `hooks/check-pending-subagents.sh`,
-registered for both events, branching on `hook_event_name`:
+**Design:** the output can always be recovered from the subagent
+itself, so the orchestrator records where to find it up front. As soon
+as a dispatch returns the subagent's `agent_id`, the orchestrator
+writes the run's `output.md` as a placeholder (template in
+`docs/subagent-run-format.md`), tagged `subagent-run-pending`, with the
+agent ID, the resume command and the subagent's transcript path
+(`<session dir>/<session_id>/subagents/agent-<agent_id>.jsonl`). When
+the result arrives, `decision-logger` writes the real output over it
+(same title and directory) with only the `subagent-run` tag.
 
-```
-Both events:
-1. Read <target-repo>/.claude/active-thread.json for {vault_root, repo, thread}.
-   If missing, do nothing — no active thread to check.
-2. Scan <vault_root>/<repo>/<thread>/subagents/*/agent-use-tracking.md.
-   Collect any with status: dispatched or status: running.
-3. If none pending: do nothing.
+A run whose output was never logged therefore stays visible: its note
+says so and points at the subagent, and the daily report counts it as
+"not finished" (subagent still running, `output.md` missing, or still
+tagged `subagent-run-pending`). Nothing writes an "abandoned" line to
+`failed-writes.log` for it anymore; that log is only for failed writes.
 
-Stop (end of every Claude response):
-4. Exit 0 with {"systemMessage": "..."} — a warning shown to the human
-   listing each pending run and saying that exiting now records them
-   as abandoned. Never blocks, keeps no state, repeats each turn while
-   runs stay pending.
-
-SessionEnd (exit, /clear, /resume; can't block):
-4. Append one line per pending run to <vault_root>/failed-writes.log:
-   <timestamp> | <repo>/<thread> | subagent-run | abandoned: <run> still <status> at session end (reason: <reason>)
-   A run already recorded as abandoned is not recorded again.
-```
-
-This turns "silently never logged" into a dead-letter entry, with no
-blocking anywhere. `install.sh` gives the `SessionEnd` registration a
-5-second `timeout`, which raises Claude Code's default 1.5-second
-`SessionEnd` budget.
-
-**Known residual limitation (accepted, not solvable in this design):**
-a hard-killed session (container reclaimed, terminal closed without a
-clean exit, crash) fires neither `Stop` nor `SessionEnd`, so its
-pending runs leave no trace.
+**Residual limitation:** a run whose dispatch never returned an
+`agent_id` (built-in Explore and Plan agents) gets a placeholder with
+no resume or transcript lines, since those agents can't be resumed.
 
 ## Session and subagent IDs (for resuming)
 
@@ -228,8 +217,9 @@ through `hooks/session-ids.sh`, never from a model's guess:
   own `agent_id` and its parent `session_id` — only for subagents whose
   definition carries a "## Tracking Contract". The subagent records
   both in its tracking note when it sets `status: running`.
-  `decision-logger` also puts them in the run's `output.md`, taking the
-  `agent_id` the orchestrator gets back with the subagent's result.
+  The orchestrator puts them in the run's placeholder `output.md` as
+  soon as the dispatch returns the `agent_id`, and `decision-logger`
+  keeps them when it writes the real output over it.
 
 To resume: `claude --resume <session_id>` for a session. A subagent is
 resumed from inside its parent session: resume the parent, then ask

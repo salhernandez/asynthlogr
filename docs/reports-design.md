@@ -24,8 +24,7 @@ be read reliably out of the vault.
 | `<repo>/<thread>/subagents/<run>/agent-use-tracking.md` | `subagent_name`, `status` | `<run>` folder name starts with the ISO date |
 | `<vault-root>/failed-writes.log` | failed and abandoned writes | date prefix of each line |
 
-The generator only *reads* these as files, the same way the
-pending-run hooks already do. Its one write, the report itself, goes
+The generator only *reads* these as files. Its one write, the report itself, goes
 through basic-memory (principle 6).
 
 ### Prerequisite: pin the timestamp format
@@ -138,7 +137,7 @@ Format choices and why:
 
 `bin/asynthlogr-report.sh`, installed to
 `.claude/asynthlogr/bin/asynthlogr-report.sh`. Plain bash +
-`grep`/`awk`/`sed`, the same toolset as the pending-run hook (POSIX
+`grep`/`awk`/`sed` (POSIX
 awk only, so it runs under mawk, gawk and BSD awk), plus `jq` to read
 the config.
 
@@ -205,8 +204,8 @@ Considered and not taken:
 - **Background catch-up at session start** (an `async` `SessionStart`
   hook): would never block, but writes reports nobody asked for.
   Adding it later is one hook registration.
-- **At session end:** there's a 1.5s budget (60s at most) shared with
-  the pending-run hook, and a Python CLI start plus a vault scan could
+- **At session end:** there's a 1.5s budget (60s at most), and a
+  Python CLI start plus a vault scan could
   overrun it. It would also run at every exit, not once a day.
 - **OS scheduler (cron, launchd, Task Scheduler):** the installer
   would have to create persistent system configuration, per OS.
