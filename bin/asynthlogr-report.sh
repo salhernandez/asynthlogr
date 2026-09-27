@@ -3,7 +3,7 @@
 # asynthlogr daily report generator. Run manually, or through the
 # /asynthlogr-report skill — nothing runs it automatically.
 #
-# Reads the vault as plain files (like the pending-run hook) and writes
+# Reads the vault as plain files and writes
 # one note, reports/<YYYY-MM-DD>.md, through basic-memory's MCP server
 # (write_note — never the basic-memory CLI): a cross-repo
 # summary table, then one section per repo and per active thread.
@@ -181,6 +181,20 @@ fm_value() {
   sed -n "s/^$2: *//p" "$1" 2>/dev/null | head -n1 | sed 's/#.*//' | tr -d "'\"" | sed 's/[[:space:]]*$//'
 }
 
+# True if run folder $1's output was never logged: the subagent is
+# still going, or output.md is missing or is still the orchestrator's
+# placeholder (its frontmatter carries the subagent-run-pending tag).
+run_pending() {
+  case "$(fm_value "$1/agent-use-tracking.md" status)" in
+    dispatched|running) return 0 ;;
+  esac
+  [ -f "$1/output.md" ] || return 0
+  awk 'NR==1 && $0=="---" {inside=1; next}
+       inside && $0=="---" {exit}
+       inside && /subagent-run-pending/ {found=1; exit}
+       END {exit !found}' "$1/output.md"
+}
+
 # ---- rendering ----
 
 # Renders day $1's report into $2. Returns 1 if the day had no activity.
@@ -211,9 +225,7 @@ render_day() {
       [ -d "$run" ] || continue
       name="$(fm_value "$run/agent-use-tracking.md" subagent_name)"
       echo "${name:-unknown}" >> "$WORK/runs"
-      case "$(fm_value "$run/agent-use-tracking.md" status)" in
-        dispatched|running) pending=$((pending + 1)) ;;
-      esac
+      if run_pending "${run%/}"; then pending=$((pending + 1)); fi
     done
 
     decisions="$(awk -F'\t' '$1 == "E" && $3 == "Decision"' "$WORK/entries" | wc -l | tr -d ' ')"
