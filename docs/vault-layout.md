@@ -25,10 +25,12 @@ stored as `basic_memory_dir` in `.claude/asynthlogr.config.json`.
     <thread-name>/
       <thread-name>.md                            # distilled decision + info entries, chronological, mixed types
       agent-use-tracking.md                       # thread-level: current step + step-transition log
+      plans/
+        <plan_name>.md                              # each finalized plan, in full (plan mode, planning-agent, or orchestrator); the thread note only links to it
       subagents/
         <run_id>_<subagent_name>-<topic_slug>/
           agent-use-tracking.md                    # this run's live status, written by the subagent itself
-          output.md                                 # this run's distilled record, written by decision-logger
+          output.md                                 # this run's record: a placeholder from the orchestrator at dispatch, replaced by decision-logger
 
   reports/
     <YYYY-MM-DD>.md                                 # daily report, written by /asynthlogr-report (docs/reports-design.md)

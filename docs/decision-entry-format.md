@@ -54,6 +54,10 @@ start, so the logger never has to create it.
 ### Related subagent runs
 - [[repo-1/auth-token-refresh/subagents/2026-09-26T11-14-51_research-agent-rate-limit-handling/output|research-agent — 11:14:51]]
 
+### Plan
+- [[repo-1/auth-token-refresh/plans/spicy-dazzling-reddy|spicy-dazzling-reddy]]
+(plan-finalized decisions only; the plan's full text lives in that note, never in the thread note)
+
 ### Files
 - [auth/token.ts:42](cursor://file/...) · [VS Code](vscode://file/...) · [GitHub](https://github.com/.../blob/<sha>/auth/token.ts#L42)
 

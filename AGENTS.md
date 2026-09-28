@@ -5,11 +5,19 @@ Maintain a decision/activity log for this session via the `decision-logger`
 subagent. Follow this exactly.
 
 Every vault write below goes through basic-memory's MCP tools
-(`write_note` to create a note, `edit_note` to append to it or merge
-frontmatter via `metadata`), always with `project: "asynthlogr"` —
+(`write_note` to create or overwrite a note, `edit_note` to append to
+it or change it in place), always with `project: "asynthlogr"` —
 omitting it writes to whatever project basic-memory touched last.
 `write_note` returns each note's `permalink`; keep it, since it's the
 `identifier` every later `edit_note` on that note needs.
+
+Frontmatter: neither tool takes a `metadata` argument. `write_note`
+sets frontmatter from a YAML block at the top of `content`. To change
+it later, `read_note` the note, then
+`edit_note(operation: "find_replace", find_text: <the lines to change, copied verbatim from read_note>, content: <the new lines>)`.
+Copy the old lines, never rebuild them: basic-memory reformats values
+it stores (`2026-09-27T03:36:56Z` comes back as
+`2026-09-27 03:36:56+00:00`), so a rebuilt `find_text` won't match.
 
 ### Your 5 steps (for step-tracking purposes)
 1. research — ask a subagent to research a specific area of the code
@@ -21,7 +29,9 @@ omitting it writes to whatever project basic-memory touched last.
 Step 3 and step 5 are the two points that trigger decision logging.
 Record every step transition the moment it happens — not several
 exchanges into the next step:
-`edit_note(identifier: <thread tracking permalink>, operation: "append", content: "- <ISO8601> — step <N> (<name>) started", metadata: {current_step: <N>, current_step_name: "<name>", updated_at: "<ISO8601>"}, project: "asynthlogr")`
+1. `edit_note(identifier: <thread tracking permalink>, operation: "append", content: "- <ISO8601> — step <N> (<name>) started", project: "asynthlogr")`
+2. Update its frontmatter's `current_step`, `current_step_name` and
+   `updated_at` with `read_note` + `find_replace` (see Frontmatter above).
 
 ### At session start (once, before any subagent dispatch)
 Determine and fix for the rest of this session:
@@ -50,13 +60,8 @@ Then, synchronously, in this order:
    `` write_note(title: "<thread>", directory: "<repo>/<thread>", content: "# <thread>\n\n**Session:** `<session_id>` · resume with `claude --resume <session_id>`\n", tags: "asynthlogr-thread", project: "asynthlogr") ``
    → keep its permalink as `thread_note`.
 2. Create the thread-level tracking note:
-   `write_note(title: "agent-use-tracking", directory: "<repo>/<thread>", content: "# Step log\n- <ISO8601> — step 1 (research) started\n", metadata: {repo: "<repo>", thread: "<thread>", session_id: "<session_id>", session_transcript: "<session_transcript>", current_step: 1, current_step_name: "research", updated_at: "<ISO8601>"}, project: "asynthlogr")`
+   `write_note(title: "agent-use-tracking", directory: "<repo>/<thread>", content: "---\nrepo: <repo>\nthread: <thread>\nsession_id: <session_id>\nsession_transcript: <session_transcript>\ncurrent_step: 1\ncurrent_step_name: research\nupdated_at: <ISO8601>\n---\n\n# Step log\n- <ISO8601> — step 1 (research) started\n", project: "asynthlogr")`
    → keep its permalink.
-3. Write `.claude/active-thread.json` with a plain file write (this
-   one file is repo-local operational config, not vault content, so
-   it does not go through basic-memory):
-   `{ "vault_root": "...", "repo": "...", "thread": "..." }`
-   (this is how the pending-run hooks find the active thread).
 
 ### On every subagent call (steps 1, 2, 3, 5 — research, questions,
 proposing a solution, planning)
@@ -65,18 +70,25 @@ Before dispatching:
    `topic_slug` (short kebab-case, from what this call is about).
    `run_folder` is `<run_id>_<subagent_name>-<topic_slug>`.
 2. Synchronously create the run's tracking note:
-   `write_note(title: "agent-use-tracking", directory: "<repo>/<thread>/subagents/<run_folder>", content: "# Run log\n- <HH:MM:SS> — dispatched\n", metadata: {run_id: "<run_id>", subagent_name: "<subagent_name>", topic_slug: "<topic_slug>", status: "dispatched", started_at: "<ISO8601>", updated_at: "<ISO8601>"}, project: "asynthlogr")`
+   `write_note(title: "agent-use-tracking", directory: "<repo>/<thread>/subagents/<run_folder>", content: "---\nrun_id: <run_id>\nsubagent_name: <subagent_name>\ntopic_slug: <topic_slug>\nstatus: dispatched\nstarted_at: <ISO8601>\nupdated_at: <ISO8601>\n---\n\n# Run log\n- <HH:MM:SS> — dispatched\n", project: "asynthlogr")`
 3. Append `- <ISO8601> — step <N> — subagent run: <run_folder>` to the
    thread tracking note's step log.
 4. Dispatch the subagent, giving it its task plus that tracking note's
    permalink (every subagent definition carries the Tracking Contract
    below).
+5. As soon as the dispatch returns the subagent's `agent_id`, write
+   the run's placeholder output note, so the run can be recovered
+   even if its result is never logged — template in
+   `.claude/asynthlogr/formats/subagent-run-format.md`:
+   `write_note(title: "output", directory: "<repo>/<thread>/subagents/<run_folder>", content: <placeholder>, tags: ["subagent-run", "subagent-run-pending"], project: "asynthlogr")`.
+   Don't wait for the subagent to finish; nothing below waits on it.
 
 When the subagent's result surfaces (even later, even in the
 background): dispatch `decision-logger` in the background — do not
 wait on it — with `entry_type: subagent-run`, including the
-subagent's `agent_id` (Claude Code returns it with the subagent's
-result) and `parent_session_id` (this session's `session_id`).
+subagent's `agent_id` and `parent_session_id` (this session's
+`session_id`). It overwrites the placeholder with the real output,
+which also drops the `subagent-run-pending` tag.
 
 ### Resuming logged conversations
 - A session: `claude --resume <session_id>` (or the transcript path).
@@ -86,6 +98,25 @@ result) and `parent_session_id` (this session's `session_id`).
 
 ### At step 3 (solution proposed) and step 5 (plan finalized)
 Dispatch `decision-logger` in the background with `entry_type: decision`.
+At step 5, save the plan first (see "Saving the plan" below).
+
+### Saving the plan (step 5)
+The plan is its own note, never just text inside the thread note.
+Whenever a plan is finalized — the user approves one you presented
+with `ExitPlanMode`, a planning-agent returns one, or you write one
+yourself — save it before dispatching `decision-logger` and before
+starting the work it describes:
+`write_note(title: "<plan_name>", directory: "<repo>/<thread>/plans", content: "---\nsource: <plan-mode | planning-agent | orchestrator>\nplan_file: <plan file path, plan mode only>\nstatus: <proposed | approved>\nupdated_at: <ISO8601>\n---\n\n**Thread:** [[<repo>/<thread>/<thread>|<thread>]]\n\n<the full plan, verbatim>", tags: "asynthlogr-plan", project: "asynthlogr")`.
+- `<plan_name>`: in plan mode, the plan file's basename without `.md`
+  (`ExitPlanMode`'s result names the file); otherwise
+  `<run_id>_<topic_slug>`, generated like a subagent run's.
+- A revised version of the same plan overwrites the same note (same
+  `<plan_name>`); a different plan gets a new one. When the user
+  approves a plan saved as `proposed`, set `status: approved` and
+  `updated_at` with `read_note` + `find_replace`.
+- Pass the note's permalink as `plan_note` in the plan-finalized
+  `decision` dispatch, and keep that dispatch's `decision` to a
+  one-paragraph summary: the plan's steps live only in the plan note.
 
 ### On explicit request ("log this", "log this as info")
 Dispatch `decision-logger` in the background with `entry_type: info`.
@@ -109,15 +140,19 @@ as `run_folder` names so the logger can link them.
 ### Tracking Contract (applies to every subagent you dispatch with a
 tracking note — research-agent, planning-agent, and any added later;
 decision-logger is exempt, since it is never given one)
-- First thing: set `status: running` via `edit_note` `metadata`, along
-  with `agent_id` and `parent_session_id` from the
+- First thing: append `- <HH:MM:SS> — running` to the note's
+  "# Run log", then set `status: running`, `updated_at`, and add
+  `agent_id` and `parent_session_id` (from the
   `asynthlogr: your agent_id is …` note a SubagentStart hook put in
-  your context.
+  your context) with `read_note` + `find_replace` (see Frontmatter
+  above).
 - After every tool call, append one line to the note's "# Run log":
   `- <HH:MM:SS> — tool call: <tool name>` (or, for a clarifying
   question, `- <HH:MM:SS> — asked clarifying question: "<question>"`).
-- Immediately before finishing — success or failure — set
-  `status: completed` (or `status: failed`) and `updated_at`.
+- Immediately before finishing — success or failure — append
+  `- <HH:MM:SS> — completed` (or `— failed: <reason>`), then set
+  `status: completed` (or `status: failed`) and `updated_at` the same
+  way.
 - Done directly via basic-memory's MCP tools, which is why each such
   subagent lists `mcp__basic-memory` in `tools` and `basic-memory` in
   `mcpServers`. Never delegated, never skipped on a short task.

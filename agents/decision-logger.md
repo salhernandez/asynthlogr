@@ -47,8 +47,12 @@ Do the following, in order:
    - `info`: render the lightweight block (decision-entry-format.md)
      and append it the same way.
    - `subagent-run`: render the output block (subagent-run-format.md)
-     and create it:
+     and write it over the placeholder the orchestrator left in that
+     run folder (same title and directory, so `write_note` replaces
+     it; if there's no placeholder, this creates the note):
      `write_note(title: "output", directory: "<repo>/<thread>/subagents/<run_folder>", content: <entry>, project: "asynthlogr", tags: "subagent-run")`.
+     Pass only `subagent-run` as the tag: dropping the placeholder's
+     `subagent-run-pending` tag is what marks the run as logged.
      Do NOT touch `agent-use-tracking.md` in that folder — it belongs
      to the subagent that ran, not to you. Fill the **Agent ID**,
      **Parent session** and **Resume** lines from the block's
@@ -75,6 +79,11 @@ Do the following, in order:
    `[[<repo>/<thread>/subagents/<run_folder>/output|<subagent_name> — <HH:MM:SS>]]`.
    Do not verify those notes exist first — they may still be in
    flight in the background; linking is by convention, not lookup.
+
+   For a decision carrying `plan_note`, render a "### Plan" section
+   with one wikilink to it: `[[<plan_note>|<last segment of plan_note>]]`.
+   The plan itself lives in that note: render `decision` as given (a
+   summary) and never copy the plan's steps into the thread note.
 
 5. Make the write from step 2.
 

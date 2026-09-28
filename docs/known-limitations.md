@@ -11,12 +11,16 @@ Ship with these documented, not silently.
    orchestrator, always labeled `*(unverified)*` in the rendered
    entry — never presented as measured.
 
-2. **A hard-killed session leaves no trace** — only a clean exit
-   fires `SessionEnd`, which records still-pending runs in
-   `failed-writes.log` (see `docs/architecture.md`, "Pending-run
-   hooks"). Relatedly, the `Stop`-hook warning goes to the human only;
-   it can't make the session wait for in-flight runs, by design (a
-   blocking `Stop` hook would interrupt Claude mid-session).
+2. **A run whose output was never logged is only flagged, not
+   recovered** — if the session ends (or `decision-logger` fails)
+   before a run's result is written, its `output.md` stays the
+   orchestrator's placeholder: it says the output is missing and names
+   the agent ID, resume command and transcript path, and the daily
+   report counts the run as "not finished". Nothing copies the output
+   in automatically, and nothing writes to `failed-writes.log` for it
+   (see `docs/architecture.md`, "Placeholder output notes"). Built-in
+   Explore and Plan agents return no agent ID, so their placeholder
+   has no way back to the output.
 
 3. **Step 3/step 5 detection is a semantic judgment**, not a platform
    event — hooks cannot detect "a solution was proposed" or "a plan

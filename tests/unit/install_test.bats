@@ -58,7 +58,7 @@ copy_fixture_target() {
   [ -f "$TARGET/.claude/agents/decision-logger.md" ]
   [ -f "$TARGET/.claude/agents/research-agent.md" ]
   [ -f "$TARGET/.claude/agents/planning-agent.md" ]
-  [ -x "$TARGET/.claude/hooks/check-pending-subagents.sh" ]
+  [ ! -e "$TARGET/.claude/hooks/check-pending-subagents.sh" ]
   [ -x "$TARGET/.claude/hooks/session-ids.sh" ]
   [ -f "$TARGET/.claude/skills/i-have-adhd/SKILL.md" ]
   [ -f "$TARGET/.claude/skills/obsidian-notation-expert/SKILL.md" ]
@@ -195,31 +195,29 @@ copy_fixture_target() {
   [[ "$output" == *"does not"*"appear to be working"* ]] || [[ "$output" == *"failed"* ]]
 }
 
-@test "merges the Stop hook into an existing settings.json without losing other content" {
+@test "merges asynthlogr's hooks into an existing settings.json without losing other content" {
   copy_fixture_target existing-settings
 
   run "$INSTALL_SH" "$TARGET"
   [ "$status" -eq 0 ]
 
-  # original unrelated content survives
-  [ "$(jq -r '.unrelatedSetting' "$TARGET/.claude/settings.json")" = "true" ]
-  [ "$(jq -r '.hooks.Stop | length' "$TARGET/.claude/settings.json")" -eq 2 ]
-  jq -e '.hooks.Stop[] | select(.hooks[0].command | contains("some-other-hook.sh"))' "$TARGET/.claude/settings.json" >/dev/null
-  jq -e '.hooks.Stop[] | select(.hooks[0].command | contains("check-pending-subagents.sh"))' "$TARGET/.claude/settings.json" >/dev/null
-  [ "$(jq -r '.hooks.SessionEnd | length' "$TARGET/.claude/settings.json")" -eq 1 ]
+  settings="$TARGET/.claude/settings.json"
+  # original unrelated content survives, and asynthlogr adds no Stop hook
+  [ "$(jq -r '.unrelatedSetting' "$settings")" = "true" ]
+  [ "$(jq -r '.hooks.Stop | length' "$settings")" -eq 1 ]
+  jq -e '.hooks.Stop[] | select(.hooks[0].command | contains("some-other-hook.sh"))' "$settings" >/dev/null
+  jq -e '.hooks.SessionEnd == null' "$settings" >/dev/null
+  jq -e '.hooks.SessionStart[0].hooks[0].command | endswith("/.claude/hooks/session-ids.sh")' "$settings" >/dev/null
 }
 
-@test "a fresh settings.json registers the hook for both Stop and SessionEnd" {
+@test "a fresh settings.json registers session-ids.sh and no Stop/SessionEnd hook" {
   copy_fixture_target empty
 
   run "$INSTALL_SH" "$TARGET"
   [ "$status" -eq 0 ]
 
   settings="$TARGET/.claude/settings.json"
-  jq -e '.hooks.Stop[0].hooks[0].command | endswith("/.claude/hooks/check-pending-subagents.sh")' "$settings" >/dev/null
-  jq -e '.hooks.SessionEnd[0].hooks[0].command | endswith("/.claude/hooks/check-pending-subagents.sh")' "$settings" >/dev/null
-  # raises Claude Code's default 1.5s SessionEnd budget
-  [ "$(jq -r '.hooks.SessionEnd[0].hooks[0].timeout' "$settings")" -ge 2 ]
+  jq -e '.hooks.Stop == null and .hooks.SessionEnd == null' "$settings" >/dev/null
   # session/agent IDs for resuming
   jq -e '.hooks.SessionStart[0].hooks[0].command | endswith("/.claude/hooks/session-ids.sh")' "$settings" >/dev/null
   jq -e '.hooks.SubagentStart[0].hooks[0].command | endswith("/.claude/hooks/session-ids.sh")' "$settings" >/dev/null
@@ -232,11 +230,33 @@ copy_fixture_target() {
   "$INSTALL_SH" "$TARGET"
 
   settings="$TARGET/.claude/settings.json"
-  [ "$(jq '[.hooks.Stop[].hooks[] | select(.command | contains("check-pending-subagents.sh"))] | length' "$settings")" -eq 1 ]
-  [ "$(jq '[.hooks.SessionEnd[].hooks[] | select(.command | contains("check-pending-subagents.sh"))] | length' "$settings")" -eq 1 ]
   [ "$(jq '[.hooks.SessionStart[].hooks[] | select(.command | contains("session-ids.sh"))] | length' "$settings")" -eq 1 ]
   [ "$(jq '[.hooks.SubagentStart[].hooks[] | select(.command | contains("session-ids.sh"))] | length' "$settings")" -eq 1 ]
-  [ "$(jq -r '.hooks.Stop | length' "$settings")" -eq 2 ]
+  [ "$(jq -r '.hooks.Stop | length' "$settings")" -eq 1 ]
+}
+
+@test "removes the retired pending-run hook left by an older install" {
+  copy_fixture_target existing-settings
+  settings="$TARGET/.claude/settings.json"
+  old='$CLAUDE_PROJECT_DIR/.claude/hooks/check-pending-subagents.sh'
+  # Simulate an older install: the pending hook sits beside another
+  # Stop hook (same entry) and alone on SessionEnd, plus its script.
+  jq --arg old "$old" '
+    .hooks.Stop[0].hooks += [{"type":"command","command":$old}]
+    | .hooks.SessionEnd = [{"hooks":[{"type":"command","command":$old,"timeout":5}]}]
+  ' "$settings" > "$settings.tmp" && mv "$settings.tmp" "$settings"
+  mkdir -p "$TARGET/.claude/hooks"
+  echo '#!/bin/sh' > "$TARGET/.claude/hooks/check-pending-subagents.sh"
+
+  run "$INSTALL_SH" "$TARGET"
+  [ "$status" -eq 0 ]
+
+  [ ! -e "$TARGET/.claude/hooks/check-pending-subagents.sh" ]
+  [ "$(jq '[.. | .command? // empty | select(contains("check-pending-subagents.sh"))] | length' "$settings")" -eq 0 ]
+  jq -e '.hooks.SessionEnd == null' "$settings" >/dev/null
+  # the unrelated Stop hook sharing that entry survives
+  [ "$(jq -r '.hooks.Stop[0].hooks | length' "$settings")" -eq 1 ]
+  jq -e '.hooks.Stop[0].hooks[0].command | contains("some-other-hook.sh")' "$settings" >/dev/null
 }
 
 @test "refuses to touch a malformed existing settings.json" {

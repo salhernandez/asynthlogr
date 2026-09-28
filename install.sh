@@ -357,10 +357,13 @@ done
 
 # ---- step 9: copy hook script, report script, skills, formats ----
 echo "[9/13] Installing hook and report scripts, skills, and formats..."
-for hook in check-pending-subagents.sh session-ids.sh; do
+for hook in session-ids.sh; do
   cp "$SCRIPT_DIR/hooks/$hook" "$TARGET/.claude/hooks/$hook"
   chmod +x "$TARGET/.claude/hooks/$hook"
 done
+# Older installs shipped a Stop/SessionEnd pending-run hook; the
+# placeholder output note replaced it, so remove its stale copy.
+rm -f "$TARGET/.claude/hooks/check-pending-subagents.sh"
 # The daily report generator, run manually via the /asynthlogr-report skill.
 cp "$SCRIPT_DIR/bin/asynthlogr-report.sh" "$TARGET/.claude/asynthlogr/bin/asynthlogr-report.sh"
 cp "$SCRIPT_DIR/bin/mcp-client.sh" "$TARGET/.claude/asynthlogr/bin/mcp-client.sh"
@@ -377,16 +380,9 @@ done
 # ---- step 10: register the hooks in .claude/settings.json ----
 echo "[10/13] Registering hooks in .claude/settings.json..."
 SETTINGS="$TARGET/.claude/settings.json"
-# check-pending-subagents.sh (branches on hook_event_name): Stop shows a
-# non-blocking warning, SessionEnd records abandoned runs in
-# failed-writes.log; its SessionEnd timeout raises Claude Code's default
-# 1.5s SessionEnd budget so the scan isn't cut short.
 # session-ids.sh: SessionStart hands the orchestrator this session's ID,
 # SubagentStart hands each tracked subagent its agent_id, for resuming.
-PENDING_HOOK='$CLAUDE_PROJECT_DIR/.claude/hooks/check-pending-subagents.sh'
 IDS_HOOK='$CLAUDE_PROJECT_DIR/.claude/hooks/session-ids.sh'
-STOP_ENTRY='{"hooks":[{"type":"command","command":"'"$PENDING_HOOK"'"}]}'
-SESSION_END_ENTRY='{"hooks":[{"type":"command","command":"'"$PENDING_HOOK"'","timeout":5}]}'
 SESSION_START_ENTRY='{"hooks":[{"type":"command","command":"'"$IDS_HOOK"'"}]}'
 SUBAGENT_START_ENTRY='{"hooks":[{"type":"command","command":"'"$IDS_HOOK"'"}]}'
 
@@ -394,12 +390,6 @@ if [ ! -f "$SETTINGS" ]; then
   cat > "$SETTINGS" <<EOF
 {
   "hooks": {
-    "Stop": [
-      $STOP_ENTRY
-    ],
-    "SessionEnd": [
-      $SESSION_END_ENTRY
-    ],
     "SessionStart": [
       $SESSION_START_ENTRY
     ],
@@ -414,8 +404,6 @@ else
   if ! command -v jq >/dev/null 2>&1; then
     echo "ERROR: jq is required to safely merge into an existing .claude/settings.json."
     echo "Install jq, or merge these hook entries into $SETTINGS by hand:"
-    echo "  hooks.Stop:          $STOP_ENTRY"
-    echo "  hooks.SessionEnd:    $SESSION_END_ENTRY"
     echo "  hooks.SessionStart:  $SESSION_START_ENTRY"
     echo "  hooks.SubagentStart: $SUBAGENT_START_ENTRY"
     exit 1
@@ -426,16 +414,26 @@ else
   fi
   # Idempotent: an event that already runs the given script is left
   # alone, so re-running the installer never adds duplicates.
+  # drop_script removes a retired asynthlogr hook (older installs ran
+  # check-pending-subagents.sh on Stop/SessionEnd) and leaves every
+  # other hook in that event alone.
   tmp="$(mktemp)"
-  jq --argjson stop "$STOP_ENTRY" --argjson session_end "$SESSION_END_ENTRY" \
-     --argjson session_start "$SESSION_START_ENTRY" --argjson subagent_start "$SUBAGENT_START_ENTRY" '
+  jq --argjson session_start "$SESSION_START_ENTRY" --argjson subagent_start "$SUBAGENT_START_ENTRY" '
     def add_once($event; $entry; $script):
       if any(.hooks[$event][]?.hooks[]?; (.command // "") | contains($script))
       then .
       else .hooks[$event] = ((.hooks[$event] // []) + [$entry])
       end;
-    add_once("Stop"; $stop; "check-pending-subagents.sh")
-    | add_once("SessionEnd"; $session_end; "check-pending-subagents.sh")
+    def drop_script($event; $script):
+      if .hooks[$event] == null then .
+      else
+        .hooks[$event] |= (
+          map(if .hooks then .hooks |= map(select((.command // "") | contains($script) | not)) else . end)
+          | map(select((.hooks // [0]) | length > 0)))
+        | if (.hooks[$event] | length) == 0 then del(.hooks[$event]) else . end
+      end;
+    drop_script("Stop"; "check-pending-subagents.sh")
+    | drop_script("SessionEnd"; "check-pending-subagents.sh")
     | add_once("SessionStart"; $session_start; "session-ids.sh")
     | add_once("SubagentStart"; $subagent_start; "session-ids.sh")
   ' "$SETTINGS" > "$tmp"
@@ -552,6 +550,3 @@ echo "                        .claude/asynthlogr/formats/*, .claude/asynthlogr/b
 echo "                        .claude/asynthlogr.config.json"
 echo ""
 echo "Daily reports: run /asynthlogr-report in Claude Code (manual only)."
-echo ""
-echo "Note: .claude/active-thread.json is NOT created here — the orchestrator"
-echo "writes it itself at the start of each session (see AGENTS.md)."

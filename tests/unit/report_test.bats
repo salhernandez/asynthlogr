@@ -99,9 +99,9 @@ current_step_name: plan
 - 2026-09-25T08:55:00-07:00 — step 5 (plan) started
 EOF
 
-  make_run "$t1" 2026-09-24T10-00-00_research-agent-a research-agent completed
-  make_run "$t1" 2026-09-24T10-30-00_research-agent-b research-agent completed
-  make_run "$t1" 2026-09-24T11-00-00_planning-agent-c planning-agent running
+  make_run "$t1" 2026-09-24T10-00-00_research-agent-a research-agent completed logged
+  make_run "$t1" 2026-09-24T10-30-00_research-agent-b research-agent completed logged
+  make_run "$t1" 2026-09-24T11-00-00_planning-agent-c planning-agent running placeholder
 
   cat > "$t2/ci-flake.md" <<'EOF'
 # ci-flake
@@ -122,10 +122,16 @@ EOF
 EOF
 }
 
-# $1 thread dir, $2 run folder, $3 subagent_name, $4 status
+# $1 thread dir, $2 run folder, $3 subagent_name, $4 status,
+# $5 output.md: logged (decision-logger wrote it), placeholder (the
+# orchestrator's, still tagged pending), or none
 make_run() {
   mkdir -p "$1/subagents/$2"
   printf -- '---\ntitle: agent-use-tracking\nsubagent_name: %s\nstatus: %s\n---\n\n# Run log\n' "$3" "$4" > "$1/subagents/$2/agent-use-tracking.md"
+  case "$5" in
+    logged) printf -- '---\ntitle: output\ntags:\n- subagent-run\n---\n\n# Subagent run - %s\n\nMentions subagent-run-pending in the body only.\n' "$3" > "$1/subagents/$2/output.md" ;;
+    placeholder) printf -- '---\ntitle: output\ntags:\n- subagent-run\n- subagent-run-pending\n---\n\n# Subagent run - %s\n**Status:** not logged yet.\n' "$3" > "$1/subagents/$2/output.md" ;;
+  esac
 }
 
 report_file() { echo "$VAULT/reports/$1.md"; }
@@ -158,6 +164,15 @@ report_file() { echo "$VAULT/reports/$1.md"; }
   grep -qx -- '> - Should refresh also rotate the device key?' "$f"
   grep -qx -- '- 23:10 — subagent-run — abandoned: 2026-09-24T11-00-00_planning-agent-c still running at session end (reason: other)' "$f"
   grep -qx '### \[\[repo-2/ci-flake/ci-flake|ci-flake\]\]' "$f"
+}
+
+@test "counts a finished run whose output was never logged as not finished" {
+  t1="$VAULT/repo-1/auth-token-refresh"
+  make_run "$t1" 2026-09-24T12-00-00_research-agent-d research-agent completed placeholder
+  make_run "$t1" 2026-09-24T12-30-00_research-agent-e research-agent completed none
+  "$REPORT" --config "$CONFIG" --date 2026-09-24
+  f="$(report_file 2026-09-24)"
+  grep -qx -- '\*\*Subagent runs:\*\* 5 (planning-agent ×1, research-agent ×4) · 3 not finished' "$f"
 }
 
 @test "shows each thread's session ID with its resume command, when recorded" {

@@ -13,9 +13,14 @@ something changes upstream.
 
 2. **Live run inside a real Claude Code session.** Checked live against
    the official basic-memory image (0.18.4): `write_note(title,
-   folder)` saves `<folder>/<title>.md` with `metadata`-style fields as
-   plain top-level frontmatter (`status: dispatched`, unquoted), so the
-   hooks read it as designed; full-path wikilinks resolve in *both*
+   folder)` saves `<folder>/<title>.md`; its MCP tools take no
+   `metadata` argument (`edit_note` rejects one with
+   `unexpected_keyword_argument`), so frontmatter goes in a YAML block
+   at the top of `content`, is saved as plain top-level frontmatter
+   (timestamps reformatted to `2026-09-27 03:36:56+00:00`), and later
+   changes use `find_replace` on lines copied from `read_note`;
+   `write_note` to an existing title+directory replaces the note, tags
+   included; full-path wikilinks resolve in *both*
    directions (run → thread and thread → run, including run folders
    with uppercase `T` and `_`, which basic-memory maps to the lowercased
    permalink); `project add` works and a duplicate add exits 0 with
@@ -48,8 +53,14 @@ something changes upstream.
   frontmatter-merged with `edit_note(identifier, operation: "append",
   content, metadata, project)`, where `identifier` is the permalink
   `write_note` returns. Every call passes `project: "asynthlogr"`,
-  since omitting it writes to the session's last-used project. All
-  agent definitions and `templates/AGENTS.md.snippet` now use these.
+  since omitting it writes to the session's last-used project. The
+  deployed 0.18.4 server has no `metadata` argument on either tool (see
+  item 2 above), so the agent definitions and
+  `templates/AGENTS.md.snippet` put frontmatter in `content` and change
+  it with `find_replace`, which works on both versions. Newer versions
+  may need `overwrite: true` before `write_note` replaces a note (the
+  report script already retries without it); the placeholder that
+  `decision-logger` writes over relies on replacing.
 
 - **Stop hook block/allow contract** — checked against the Claude Code
   hooks docs: `Stop` fires at the end of *every* Claude response, and
@@ -57,8 +68,9 @@ something changes upstream.
   Claude and forces it to continue, never showing it to the human.
   Redesigned: `Stop` shows a non-blocking `systemMessage` warning, and
   a `SessionEnd` registration of the same script records still-pending
-  runs in `failed-writes.log`. See `docs/architecture.md`,
-  "Pending-run hooks".
+  runs in `failed-writes.log`. Since superseded: the hook is gone, and
+  each run gets a placeholder `output.md` at dispatch instead. See
+  `docs/architecture.md`, "Placeholder output notes".
 
 - **Subagent frontmatter (`background`, `mcpServers`, tools)** —
   checked against the Claude Code subagent docs. `background: true`

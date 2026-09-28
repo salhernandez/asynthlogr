@@ -20,9 +20,9 @@ decisions, captured without slowing anything down.
 - Records the Claude Code session ID of every thread and the agent ID
   of every subagent run (straight from Claude Code's hooks), so you can
   resume either conversation later: `claude --resume <session_id>`.
-- Warns you (without ever blocking) while subagent runs are still in
-  flight, and if you exit anyway, records them as abandoned in
-  `failed-writes.log` instead of losing them silently.
+- Never makes you wait on a subagent: each run's output note starts as
+  a placeholder with the agent ID, resume command and transcript path,
+  so a run whose output never got logged can still be recovered.
 - Talks to you like a human (ADHD-optimized formatting, see
   `skills/i-have-adhd/`) for anything addressed to you; strict machine
   templates for everything agent-to-agent.
@@ -51,8 +51,8 @@ decisions, captured without slowing anything down.
 - `uv` (needed to install basic-memory if it isn't already present and
   no Docker deployment is found)
 - git + gh CLI (for resolving commit/PR links)
-- `jq` — used by the pending-run hooks at runtime, and by `install.sh`
-  to merge into an existing `.claude/settings.json`
+- `jq` — used by the hooks and the report script at runtime, and by
+  `install.sh` to merge into an existing `.claude/settings.json`
 - Obsidian is an optional viewer on the same directory basic-memory
   manages — not itself a requirement.
 
@@ -106,7 +106,7 @@ See `tests/README.md` for what each layer covers and what it doesn't.
 ## Documentation
 - `docs/architecture.md` — problem statement, the 5-step flow this
   observes, core architectural principles, the race-condition fix, the
-  pending-run hooks, the human/machine communication boundary
+  placeholder output notes, the human/machine communication boundary
 - `docs/vault-layout.md` — full vault directory structure
 - `docs/decision-entry-format.md` — the decision/info entry templates
 - `docs/subagent-run-format.md` — the delegation template, output.md,
@@ -120,8 +120,9 @@ See `tests/README.md` for what each layer covers and what it doesn't.
 - Model name / context-window % are self-reported by the orchestrator,
   not measured — Claude Code has no API for this. Always labeled
   unverified in the log.
-- A hard-killed session (not a clean exit) fires no hooks, so a
-  subagent run still in flight leaves no trace in `failed-writes.log`.
+- A run whose output was never logged (session ended first) keeps only
+  its placeholder note; you recover the output from the subagent
+  yourself, using the resume command or transcript path it lists.
 - Thread naming happens once per session; it isn't retroactively
   editable by decision-logger.
 
@@ -132,8 +133,6 @@ See `docs/known-limitations.md` for the full list with explanations.
 - Creates: `.claude/agents/*.md`, `.claude/hooks/*`, `.claude/skills/*/`,
   `.claude/asynthlogr/formats/*`, `.claude/asynthlogr/bin/*`,
   `.claude/asynthlogr.config.json`
-- Created later by the orchestrator, not the installer:
-  `.claude/active-thread.json` (at the start of each session)
 - Registers basic-memory as a Claude Code MCP server (local scope, for
   the target repo)
 
